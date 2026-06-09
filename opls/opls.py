@@ -95,6 +95,7 @@ def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True, useBOSS=Fal
     _cache_boss_imp = {}
 
     bond_idx, angle_idx, dihedral_idx, improper_idx = _get_opls_bonded_idx(rdmol)
+    # all missing
     missing_atoms = set(list(range(rdmol.GetNumAtoms())))
     missing_bonded = set.union(set(bond_idx), set(angle_idx), set(dihedral_idx))
     missing_impropers = set(improper_idx)
@@ -121,6 +122,8 @@ def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True, useBOSS=Fal
             logger.warn(f"(GMX finder) Missing/Total {len(missing_gmx_atoms)}/{rdmol.GetNumAtoms} "
                         f"atom types for GMX template search!")
         if not overwrite:
+            # if overwrite=False, the next method only finds the missing of previous methods
+            # else the missing_xxx keep as initialized
             missing_atoms = missing_atoms.intersection(missing_gmx_atoms)
 
         params_atoms.update(opls_gmx_atoms)
@@ -200,7 +203,14 @@ def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True, useBOSS=Fal
                     f"dihedrals, and {len(opls_boss_improper)}/{len(improper_idx)} impropers.")
 
     if useML:
-        pass
+        # find missing only
+        opls_ml_atoms, opls_ml_bonded, opls_ml_improper = match_params_ml(rdmol,
+                                                                          missing_atoms,
+                                                                          missing_bonded,
+                                                                          missing_impropers)
+        params_atoms.update(opls_ml_atoms)
+        params_bonded.update(opls_ml_bonded)
+        params_impropers.update(opls_ml_improper)
 
     logger.info(f"Total Found atoms/Total atoms: {len(params_atoms)}/{rdmol.GetNumAtoms()}")
     m_b, m_a, m_d = _count_bonded(params_bonded)
