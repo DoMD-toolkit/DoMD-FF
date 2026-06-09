@@ -1,8 +1,8 @@
-from itertools import combinations
 from openbabel import openbabel as ob
 
 from rdkit import Chem
 
+from lib import get_opls_bonded_idx, count_bonded
 from misc.logger import logger
 from opls.functions import (
     _build_hash,
@@ -17,52 +17,6 @@ from opls.opls_db import opls_db
 
 THRESHOLD_L = 5000
 THRESHOLD_H = 20000
-
-
-def _count_bonded(bonded):
-    m_b = m_a = m_d = 0
-    for m in bonded:
-        if len(m) == 2:
-            m_b += 1
-        if len(m) == 3:
-            m_a += 1
-        if len(m) == 4:
-            m_d += 1
-    return m_b, m_a, m_d
-
-
-def _get_opls_bonded_idx(rdmol: Chem.Mol):
-    bond_idx, angle_idx, dihedral_idx, improper_idx = set(), set(), set(), set()
-    for bond in rdmol.GetBonds():
-        bond_idx.add((bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()))
-        bi, bj = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
-        atom_i, atom_j = rdmol.GetAtomWithIdx(bi), rdmol.GetAtomWithIdx(bj)
-        for atom_k in atom_i.GetNeighbors():
-            bk = atom_k.GetIdx()
-            if bk == bj:
-                continue
-            for atom_l in atom_k.GetNeighbors():
-                bl = atom_l.GetIdx()
-                if bl in (bi, bj, bk):
-                    continue
-                tpl = (bk, bi, bj, bl)
-                if tpl not in bond_idx:
-                    dihedral_idx.add(tpl)
-    for atom in rdmol.GetAtoms():
-        j = atom.GetIdx()
-        nbrs = [_.GetIdx() for _ in atom.GetNeighbors()]
-        for i, k in combinations(nbrs, 2):
-            tpl = (i, j, k)
-            if tpl not in angle_idx:
-                angle_idx.add(tpl)
-    for atom in rdmol.GetAtoms():
-        idx = atom.GetIdx()
-        if len(atom.GetNeighbors()) == 3 and atom.GetHybridization().name == 'SP2':
-            neighbors = list(atom.GetNeighbors())
-            # the center atom is always at j.
-            i, j, k, l = neighbors[0].GetIdx(), idx, neighbors[1].GetIdx(), neighbors[2].GetIdx()
-            improper_idx.add((i, j, k, l))
-    return bond_idx, angle_idx, dihedral_idx, improper_idx
 
 
 def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True, useBOSS=False, useML=False, overwrite=False):
@@ -94,7 +48,7 @@ def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True, useBOSS=Fal
     _cache_boss_dih = {}
     _cache_boss_imp = {}
 
-    bond_idx, angle_idx, dihedral_idx, improper_idx = _get_opls_bonded_idx(rdmol)
+    bond_idx, angle_idx, dihedral_idx, improper_idx = get_opls_bonded_idx(rdmol)
     # all missing
     missing_atoms = set(list(range(rdmol.GetNumAtoms())))
     missing_bonded = set.union(set(bond_idx), set(angle_idx), set(dihedral_idx))
@@ -131,7 +85,7 @@ def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True, useBOSS=Fal
         params_bonded.update(opls_gmx_bonded)
 
         if len(missing_gmx_bonded) > 0:
-            m_b, m_a, m_d = _count_bonded(missing_bonded)
+            m_b, m_a, m_d = count_bonded(missing_bonded)
             logger.warn(f"(GMX finder) Missing/Total "
                         f"{m_b}/{len(bond_idx)}, {m_a}/{len(angle_idx)}, {m_d}/{len(dihedral_idx)} "
                         f"bond, angle, dihedral types for GMX template search!")
@@ -148,7 +102,7 @@ def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True, useBOSS=Fal
             missing_impropers = missing_impropers.intersection(missing_gmx_improper)
         params_impropers.update(opls_gmx_improper)
 
-        m_b, m_a, m_d = _count_bonded(opls_gmx_bonded)
+        m_b, m_a, m_d = count_bonded(opls_gmx_bonded)
         logger.info(f"GMX searching total found {len(opls_gmx_atoms)}/{rdmol.GetNumAtoms()} atoms, "
                     f"{m_b}/{len(bond_idx)}, {m_a}/{len(angle_idx)}, {m_d}/{len(dihedral_idx)} bonds, angles, "
                     f"dihedrals, and {len(opls_gmx_improper)}/{len(improper_idx)} impropers.")
@@ -179,7 +133,7 @@ def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True, useBOSS=Fal
             missing_impropers
         )
         if len(missing_boss_bonded) > 0:
-            m_b, m_a, m_d = _count_bonded(missing_boss_bonded)
+            m_b, m_a, m_d = count_bonded(missing_boss_bonded)
             logger.warn(f"(BOSS finder) Missing/Total "
                         f"{m_b}/{len(bond_idx)}, {m_a}/{len(angle_idx)}, {m_d}/{len(dihedral_idx)} "
                         f"bond, angle, dihedral types for BOSS search!")
@@ -197,7 +151,7 @@ def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True, useBOSS=Fal
         params_bonded.update(opls_boss_bonded)
         params_impropers.update(opls_boss_improper)
 
-        m_b, m_a, m_d = _count_bonded(opls_boss_bonded)
+        m_b, m_a, m_d = count_bonded(opls_boss_bonded)
         logger.info(f"BOSS searching total found {len(opls_boss_atoms)}/{rdmol.GetNumAtoms()} atoms, "
                     f"{m_b}/{len(bond_idx)}, {m_a}/{len(angle_idx)}, {m_d}/{len(dihedral_idx)} bonds, angles, "
                     f"dihedrals, and {len(opls_boss_improper)}/{len(improper_idx)} impropers.")
@@ -213,7 +167,7 @@ def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True, useBOSS=Fal
         params_impropers.update(opls_ml_improper)
 
     logger.info(f"Total Found atoms/Total atoms: {len(params_atoms)}/{rdmol.GetNumAtoms()}")
-    m_b, m_a, m_d = _count_bonded(params_bonded)
+    m_b, m_a, m_d = count_bonded(params_bonded)
     logger.info(f"Found bonds/Total angles/Total dihedrals/total impropers/total: {m_b}/{len(bond_idx)}"
                 f" {m_a}/{len(angle_idx)} {m_d}/{len(dihedral_idx)} {len(params_impropers)}/{len(improper_idx)}")
 
