@@ -47,7 +47,7 @@ def task_file_log_scope(task_name, log_dir):
     debug_log_path = os.path.join(log_dir, f"{task_name}_debug.log")
 
     handler = logging.FileHandler(debug_log_path, encoding='utf-8')
-    handler.setLevel(logging.DEBUG)  # 吞入所有计算细节
+    handler.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s [%(levelname)s] (%(filename)s:%(lineno)d) - %(message)s')
     handler.setFormatter(formatter)
 

@@ -4,17 +4,15 @@
     <meta charset="UTF-8">
     <title>MD AutoFF Pipeline v1.0</title>
     <style>
-        /* ================= 核心优化：全屏锁定与弹性布局 ================= */
         body {
             background-color: #c0c0c0; color: #000000; font-family: "Times New Roman", Times, serif;
             margin: 0; padding: 15px;
-            height: 100vh; /* 强制视口高度 */
+            height: 100vh;
             box-sizing: border-box;
             display: flex; justify-content: center;
-            overflow: hidden; /* 绝对禁止页面出现外部滚动条 */
+            overflow: hidden;
         }
 
-        /* 增加一个主容器来控制宽度和纵向弹性 */
         .main-wrapper {
             width: 100%; max-width: 900px;
             display: flex; flex-direction: column;
@@ -27,15 +25,14 @@
             background-color: #c0c0c0;
             border-top: 2px solid #ffffff; border-left: 2px solid #ffffff;
             border-right: 2px solid #404040; border-bottom: 2px solid #404040;
-            padding: 15px; margin-bottom: 10px; /* 减小间距 */
-            flex-shrink: 0; /* 输入区窗口绝对不允许被挤压 */
+            padding: 15px; margin-bottom: 10px;
+            flex-shrink: 0;
         }
 
-        /* 终端窗口特殊设置：弹性撑满剩余高度 */
         #terminal-window {
-            flex-grow: 1; /* 吃掉所有多余的屏幕高度 */
+            flex-grow: 1;
             display: flex; flex-direction: column;
-            min-height: 0; /* Flexbox 嵌套滚动的关键点 */
+            min-height: 0;
             margin-bottom: 5px;
         }
 
@@ -46,12 +43,11 @@
 
         #terminal {
             color: #00ff00; font-family: "Courier New", monospace; font-size: 14px; padding: 10px;
-            flex-grow: 1; /* 终端文本区撑满容器 */
-            overflow-y: scroll; /* 只有黑框内部可以滚动 */
+            flex-grow: 1;
+            overflow-y: scroll;
             margin: 0; white-space: pre-wrap;
         }
 
-        /* ================= 其他复古样式 ================= */
         #dropzone {
             background-color: #ffffff;
             border-top: 2px solid #404040; border-left: 2px solid #404040;
@@ -97,14 +93,12 @@
             display: flex; justify-content: space-between; flex-shrink: 0;
         }
 
-        /* 经典的蚀刻效果页脚 */
         .footer {
             flex-shrink: 0; text-align: center; font-family: Arial, sans-serif; font-size: 12px;
             color: #606060; border-top: 1px solid #808080; border-bottom: 1px solid #ffffff;
             padding: 5px 0; text-shadow: 1px 1px 0px #ffffff;
         }
 
-        /* 复古模态弹窗 */
         #modalOverlay {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAABZJREFUeNpi2rVrf2QAAyPj////BwgwAA2SAuN1J1TBAAAAAElFTkSuQmCC');
