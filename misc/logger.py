@@ -1,4 +1,6 @@
 import logging
+import os
+from contextlib import contextmanager
 
 logger_format = '%(asctime)s [%(levelname)s] %(name)s (%(filename)s:%(lineno)d): %(message)s'
 logging.basicConfig(format=logger_format, level=logging.INFO)
@@ -33,7 +35,25 @@ class DuplicateFilter:
         pass
 
 
-# Example usage:
-logger = get_logger(__name__)
-logger.setLevel('INFO')
+logger = get_logger("task_logger")
 # logger.setLevel('ERROR')
+logger.setLevel(logging.DEBUG)
+logger.propagate = False
+
+
+@contextmanager
+def task_file_log_scope(task_name, log_dir):
+    os.makedirs(log_dir, exist_ok=True)
+    debug_log_path = os.path.join(log_dir, f"{task_name}_debug.log")
+
+    handler = logging.FileHandler(debug_log_path, encoding='utf-8')
+    handler.setLevel(logging.DEBUG)  # 吞入所有计算细节
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s] (%(filename)s:%(lineno)d) - %(message)s')
+    handler.setFormatter(formatter)
+
+    logger.addHandler(handler)
+    try:
+        yield debug_log_path
+    finally:
+        handler.close()
+        logger.removeHandler(handler)
