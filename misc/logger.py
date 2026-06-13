@@ -36,8 +36,7 @@ class DuplicateFilter:
 
 
 logger = get_logger("task_logger")
-# logger.setLevel('ERROR')
-logger.setLevel(logging.DEBUG)
+logger.setLevel('DEBUG')
 logger.propagate = False
 
 
@@ -48,7 +47,7 @@ def task_file_log_scope(task_name, log_dir):
 
     handler = logging.FileHandler(debug_log_path, encoding='utf-8')
     handler.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s [%(levelname)s] (%(filename)s:%(lineno)d) - %(message)s')
+    formatter = logging.Formatter(logger_format)
     handler.setFormatter(formatter)
 
     logger.addHandler(handler)

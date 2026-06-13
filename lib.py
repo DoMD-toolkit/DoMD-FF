@@ -25,7 +25,7 @@ def get_opls_bonded_idx(rdmol: Chem.Mol):
             bk = atom_k.GetIdx()
             if bk == bj:
                 continue
-            for atom_l in atom_k.GetNeighbors():
+            for atom_l in atom_j.GetNeighbors():
                 bl = atom_l.GetIdx()
                 if bl in (bi, bj, bk):
                     continue

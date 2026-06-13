@@ -165,7 +165,6 @@ def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True, useBOSS=Fal
         params_atoms.update(opls_ml_atoms)
         params_bonded.update(opls_ml_bonded)
         params_impropers.update(opls_ml_improper)
-
     logger.info(f"Total Found atoms/Total atoms: {len(params_atoms)}/{rdmol.GetNumAtoms()}")
     m_b, m_a, m_d = count_bonded(params_bonded)
     logger.info(f"Found bonds/Total angles/Total dihedrals/total impropers/total: {m_b}/{len(bond_idx)}"
