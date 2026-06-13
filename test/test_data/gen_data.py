@@ -96,12 +96,21 @@ def generate_perfect_separated_test_systems(pdb_out="test_system.pdb", sdf_out="
     combined_mol.SetProp("RES_NAMES", " ".join(res_names_list))
     combined_mol.SetProp("RES_NUMS", " ".join(res_ids_list))
 
-    with open(sdf_out, "w") as f:
-        f.write(Chem.MolToMolBlock(combined_mol, forceV3000=True))
-        f.write(f">  <BOX_TENSOR>\n{combined_mol.GetProp('BOX_TENSOR')}\n\n")
-        f.write(f">  <RES_NAMES>\n{combined_mol.GetProp('RES_NAMES')}\n\n")
-        f.write(f">  <RES_NUMS>\n{combined_mol.GetProp('RES_NUMS')}\n\n")
-        f.write("$$$$\n")
+    # with open(sdf_out, "w") as f:
+    #     f.write(Chem.MolToMolBlock(combined_mol, forceV3000=True))
+    #     f.write(f">  <BOX_TENSOR>\n{combined_mol.GetProp('BOX_TENSOR')}\n\n")
+    #     f.write(f">  <RES_NAMES>\n{combined_mol.GetProp('RES_NAMES')}\n\n")
+    #     f.write(f">  <RES_NUMS>\n{combined_mol.GetProp('RES_NUMS')}\n\n")
+    #     f.write("$$$$\n")
+
+    writer = Chem.SDWriter(sdf_out)
+    writer.SetForceV3000(True)
+    combined_mol.SetProp('BOX_TENSOR', str(combined_mol.GetProp('BOX_TENSOR')))
+    combined_mol.SetProp('RES_NAMES', str(combined_mol.GetProp('RES_NAMES')))
+    combined_mol.SetProp('RES_NUMS', str(combined_mol.GetProp('RES_NUMS')))
+
+    writer.write(combined_mol)
+    writer.close()
 
 
 
