@@ -15,14 +15,25 @@ def generate_perfect_separated_test_systems(pdb_out="test_system.pdb", sdf_out="
     AllChem.EmbedMolecule(mol2, AllChem.ETKDGv3())
     AllChem.MMFFOptimizeMolecule(mol2)
 
+    mol3 = Chem.MolFromSmiles("c1ccccc1")
+    mol3 = Chem.AddHs(mol3)
+    AllChem.EmbedMolecule(mol3, AllChem.ETKDGv3())
+    AllChem.MMFFOptimizeMolecule(mol3)
+
 
     conf2 = mol2.GetConformer()
     for i in range(mol2.GetNumAtoms()):
         pos = conf2.GetAtomPosition(i)
         conf2.SetAtomPosition(i, (pos.x + 15.0, pos.y, pos.z))
 
+    conf3 = mol3.GetConformer()
+    for i in range(mol3.GetNumAtoms()):
+        pos = conf3.GetAtomPosition(i)
+        conf3.SetAtomPosition(i, (pos.x + 30.0, pos.y, pos.z))
+
 
     combined_mol = Chem.CombineMols(mol1, mol2)
+    combined_mol = Chem.CombineMols(combined_mol, mol3)
 
 
     benzene_query = Chem.MolFromSmarts("c1ccccc1")
