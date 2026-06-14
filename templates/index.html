@@ -6,46 +6,27 @@
     <style>
         body {
             background-color: #c0c0c0; color: #000000; font-family: "Times New Roman", Times, serif;
-            margin: 0; padding: 15px;
-            height: 100vh;
-            box-sizing: border-box;
-            display: flex; justify-content: center;
-            overflow: hidden;
+            margin: 0; padding: 15px; height: 100vh; box-sizing: border-box;
+            display: flex; justify-content: center; overflow: hidden;
         }
-
-        .main-wrapper {
-            width: 100%; max-width: 900px;
-            display: flex; flex-direction: column;
-            height: 100%;
-        }
-
+        .main-wrapper { width: 100%; max-width: 900px; display: flex; flex-direction: column; height: 100%; }
         h1, h2, h3 { font-family: Arial, Helvetica, sans-serif; border-bottom: 2px solid #808080; padding-bottom: 2px; margin-top: 0; }
 
         .window {
             background-color: #c0c0c0;
             border-top: 2px solid #ffffff; border-left: 2px solid #ffffff;
             border-right: 2px solid #404040; border-bottom: 2px solid #404040;
-            padding: 15px; margin-bottom: 10px;
-            flex-shrink: 0;
+            padding: 15px; margin-bottom: 10px; flex-shrink: 0;
         }
 
-        #terminal-window {
-            flex-grow: 1;
-            display: flex; flex-direction: column;
-            min-height: 0;
-            margin-bottom: 5px;
-        }
-
+        #terminal-window { flex-grow: 1; display: flex; flex-direction: column; min-height: 0; margin-bottom: 5px; }
         #terminal-container {
             border: 2px inset #fff; background-color: #000000; margin-top: 10px;
             flex-grow: 1; display: flex; flex-direction: column; min-height: 0;
         }
-
         #terminal {
             color: #00ff00; font-family: "Courier New", monospace; font-size: 14px; padding: 10px;
-            flex-grow: 1;
-            overflow-y: scroll;
-            margin: 0; white-space: pre-wrap;
+            flex-grow: 1; overflow-y: scroll; margin: 0; white-space: pre-wrap;
         }
 
         #dropzone {
@@ -75,8 +56,7 @@
             border-bottom: 2px solid #ffffff; border-right: 2px solid #ffffff;
             background-color: #999999; color: #555555;
             padding: 10px; margin-top: 10px;
-            font-family: Arial, sans-serif; font-weight: bold; text-align: center;
-            box-sizing: border-box;
+            font-family: Arial, sans-serif; font-weight: bold; text-align: center; box-sizing: border-box;
         }
         #result-area.status-success { background-color: #2b579a; color: #ffffff; }
         #result-area.status-error { background-color: #903030; color: #ffffff; }
@@ -92,13 +72,13 @@
             font-family: Arial, sans-serif; font-weight: bold; margin-bottom: 10px;
             display: flex; justify-content: space-between; flex-shrink: 0;
         }
-
         .footer {
             flex-shrink: 0; text-align: center; font-family: Arial, sans-serif; font-size: 12px;
             color: #606060; border-top: 1px solid #808080; border-bottom: 1px solid #ffffff;
             padding: 5px 0; text-shadow: 1px 1px 0px #ffffff;
         }
 
+        /* 弹窗 */
         #modalOverlay {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAABZJREFUeNpi2rVrf2QAAyPj////BwgwAA2SAuN1J1TBAAAAAElFTkSuQmCC');
@@ -112,27 +92,26 @@
 <body>
 
     <div class="main-wrapper">
-
         <div class="top-bar">
-            <span>MD Auto FF Pipeline Interface [v1.0]</span>
+            <span>MD AutoFF Pipeline Interface [v1.0]</span>
             <span>SYS_READY</span>
         </div>
 
         <div class="window">
             <h2>Input Parameters</h2>
-
             <div id="dropzone">Click to Browse or Drag & Drop (.pdb, .sdf)</div>
             <input type="file" id="fileInput" accept=".pdb,.sdf" multiple>
 
             <div class="form-group file-status">
                 <div>Mol File: <span id="molDisplay" style="color:blue;">[None]</span></div>
+                <!--<div>Idx File: <span id="idxDisplay" style="color:green;">[None]</span></div>-->
             </div>
 
             <hr style="border: 0; border-top: 1px solid #808080; border-bottom: 1px solid #ffffff; margin: 8px 0;">
 
             <div class="form-group" style="display: flex; gap: 15px;">
-                <span><input type="checkbox" id="useGMX" checked> <label>GROMACS Template</label></span>
-                <span><input type="checkbox" id="useBOSS" checked> <label>BOSS DB</label></span>
+                <span><input type="checkbox" id="useGMX" checked> <label>GROMACS</label></span>
+                <span><input type="checkbox" id="useBOSS" checked> <label>BOSS</label></span>
                 <span><input type="checkbox" id="useML"> <label>ML Inference</label></span>
             </div>
 
@@ -148,13 +127,12 @@
 
         <div class="window" id="terminal-window">
             <h3>Console Output</h3>
-            <div id="terminal-container"><pre id="terminal">Welcome!</pre></div>
+            <div id="terminal-container"><pre id="terminal">C:\SYSTEM> _</pre></div>
         </div>
 
         <div class="footer">
-            Copyright &copy; 2025-2026 DoMD-toolkit group. All Rights Reserved.
+            Copyright &copy; 2000-2026 DoMD-tookit Team. All Rights Reserved.<br>
         </div>
-
     </div>
 
     <div id="modalOverlay">
@@ -192,7 +170,7 @@
 
         function logToTerminal(msg) {
             const time = new Date().toTimeString().split(' ')[0];
-            terminal.textContent += `\n[${time}] ${msg}`;
+            terminal.appendChild(document.createTextNode(`\n[${time}] ${msg}`));
             terminal.scrollTop = terminal.scrollHeight;
         }
 
@@ -202,13 +180,13 @@
                 if (name.endsWith('.pdb') || name.endsWith('.sdf')) {
                     stateFiles.mol = file;
                     molDisplay.textContent = file.name;
-                    logToTerminal(`* Loaded Molecule: ${file.name}`);
+                    logToTerminal(`* Memory loaded: ${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`);
                 } else if (name.endsWith('.idx')) {
                     stateFiles.idx = file;
                     idxDisplay.textContent = file.name;
-                    logToTerminal(`* Loaded Index: ${file.name}`);
+                    logToTerminal(`* Memory loaded: ${file.name}`);
                 } else {
-                    logToTerminal(`! Warning: Ignored unknown file type: ${file.name}`);
+                    logToTerminal(`! Ignored unknown file type: ${file.name}`);
                 }
             });
         }
@@ -222,6 +200,53 @@
         });
         fileInput.addEventListener('change', (e) => processFiles(e.target.files));
 
+        function uploadWithProgress(formData) {
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/api/upload_and_run');
+
+                const time = new Date().toTimeString().split(' ')[0];
+                terminal.appendChild(document.createTextNode(`\n[${time}] DATA_TRANSFER: `));
+
+                const progressSpan = document.createElement('span');
+                progressSpan.style.color = '#33ccff';
+                progressSpan.textContent = `[····················] 0%`;
+                terminal.appendChild(progressSpan);
+                terminal.scrollTop = terminal.scrollHeight;
+
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const percent = Math.round((e.loaded / e.total) * 100);
+                        const filled = Math.floor(percent / 5);
+                        const bar = '█'.repeat(filled) + '·'.repeat(20 - filled);
+                        progressSpan.textContent = `[${bar}] ${percent}%`;
+                    }
+                };
+
+                xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        progressSpan.textContent = `[████████████████████] 100% (OK)`;
+                        progressSpan.style.color = '#00ff00';
+                        try {
+                            resolve(JSON.parse(xhr.responseText));
+                        } catch(err) { reject("JSON Parse Error"); }
+                    } else {
+                        progressSpan.textContent = `[SERVER_REJECTED]`;
+                        progressSpan.style.color = '#ff0000';
+                        reject(`HTTP ${xhr.status}`);
+                    }
+                };
+
+                xhr.onerror = () => {
+                    progressSpan.textContent = `[NETWORK_LINK_DEAD]`;
+                    progressSpan.style.color = '#ff0000';
+                    reject("Connection to VPS lost");
+                };
+
+                xhr.send(formData);
+            });
+        }
+
         document.getElementById('submitBtn').addEventListener('click', async () => {
             if (!stateFiles.mol) {
                 showModal("Missing Input: You must provide at least one .PDB or .SDF file to proceed.", true);
@@ -229,13 +254,12 @@
             }
 
             document.getElementById('submitBtn').disabled = true;
-
             resultArea.className = "";
             downloadLink.classList.remove('active');
-            resultMsg.textContent = "[PROCESSING] Awaiting data stream from computation node...";
+            resultMsg.textContent = "[PROCESSING] Uploading payload to remote cluster...";
 
             logToTerminal("=========================================");
-            logToTerminal(">>> INITIALIZING COMPUTATION THREAD...");
+            logToTerminal(">>> INITIATING P2P UPLOAD SEQUENCE...");
 
             const formData = new FormData();
             formData.append('files', stateFiles.mol);
@@ -248,10 +272,11 @@
             }));
 
             try {
-                const res = await fetch('/api/upload_and_run', { method: 'POST', body: formData });
-                const data = await res.json();
-
+                const data = await uploadWithProgress(formData);
                 if (data.status !== 'success') throw new Error(data.error);
+
+                resultMsg.textContent = "[PROCESSING] Data received. Awaiting computation logs...";
+                logToTerminal(">>> WAITING FOR COMPUTE NODE...");
 
                 const taskId = data.task_id;
                 const evtSource = new EventSource(`/api/stream_logs/${taskId}`);
@@ -287,8 +312,8 @@
                 };
 
             } catch (err) {
-                logToTerminal(`NETWORK ERR: ${err}`);
-                showModal("Network communication failed. Server unreachable.", true);
+                logToTerminal(`! UPLOAD ABORTED: ${err}`);
+                showModal("Network communication failed during upload.", true);
                 document.getElementById('submitBtn').disabled = false;
                 resultArea.className = "";
                 resultMsg.textContent = "[SYSTEM ALERT] Network Exception.";
