@@ -28,6 +28,7 @@ def sdf_load_all_as_one(input_path):
         notatend = obConversion.Read(ob_mol)
 
     success = rd_combined_mol.GetNumAtoms() == ob_combined_mol.NumAtoms()
+    Chem.SanitizeMol(rd_combined_mol)
     return rd_combined_mol, ob_combined_mol, success
 
 
