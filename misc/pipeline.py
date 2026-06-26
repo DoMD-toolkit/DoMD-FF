@@ -4,8 +4,6 @@ import logging
 import numpy as np
 from rdkit import Chem
 
-# Ensure your ForceField module can be located
-sys.path.append('E:\\downloads\\article\\high_throughput_system\\software\\DoMDv1.0.2\\DoMD-FF')
 from ForceField import FF
 from misc.logger import logger
 from misc.io.gmx import write_gro_file, write_top_file, write_itp_file, write_atomtypes_head, \
@@ -162,25 +160,3 @@ def run_top_mode(rdmol, output_dir, base_name="system", obmol=None):
     logger.info("===> top mode finished successfully.\n")
 
 
-
-
-
-if __name__ == '__main__':
-    logger.setLevel(logging.INFO)
-    logger.propagate = True
-    from misc.parser import molecule_reader
-
-    # Create test output directory
-    test_output_dir = 'E:\\downloads\\article\\high_throughput_system\\software\\DoMDv1.0.2\\DoMD-FF\\test\\test_data\\output'
-    test_itp_file = 'E:\\downloads\\article\\high_throughput_system\\software\\DoMDv1.0.2\\DoMD-FF\\test\\test_data\\split_mols_fixed.sdf'
-    test_top_file = 'E:\\downloads\\article\\high_throughput_system\\software\\DoMDv1.0.2\\DoMD-FF\\test\\test_data\\test_system.sdf'
-
-    rdmols = Chem.SDMolSupplier(test_itp_file, removeHs=False)
-    #for mol in rdmols:
-    #    if mol is not None:
-    #        Chem.SanitizeMol(mol)
-    obmol, rdmol, coordinates, res_names, res_ids, box_tensor = molecule_reader(test_itp_file)
-
-    # ---- Test Case 1: itp mode ----
-    run_itp_mode(rdmols, test_output_dir, base_name="itp_component")
-    run_top_mode(rdmol, test_output_dir, base_name="top_system", obmol=obmol)
