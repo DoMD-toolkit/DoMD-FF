@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 from contextlib import contextmanager
 
 logger_format = '%(asctime)s [%(levelname)s] %(name)s (%(filename)s:%(lineno)d): %(message)s'
@@ -28,16 +29,26 @@ class DuplicateFilter:
         return not is_duplicate
 
     def __enter__(self):
-        if len(self.logger.filters) == 0:
+        if self not in self.logger.filters:
             self.logger.addFilter(self)
+        return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
 
 
 logger = get_logger("task_logger")
-logger.setLevel('DEBUG')
+logger.setLevel(logging.DEBUG)
 logger.propagate = False
+
+if not any(isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler) for h in logger.handlers):
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.DEBUG)
+
+    formatter = logging.Formatter(logger_format)
+    console_handler.setFormatter(formatter)
+
+    logger.addHandler(console_handler)
 
 
 @contextmanager

@@ -10,12 +10,47 @@ from misc.logger import logger
 def sdf_load_all_as_one(input_path):
     suppl = Chem.SDMolSupplier(input_path, removeHs=False)
     rd_combined_mol = None
+
+    # Accumulators for tracking properties across all molecules in the list
+    aggregated_res_names = []
+    aggregated_res_nums = []
+    global_box_tensor = None
+
     for mol in suppl:
-        if mol is None: continue
+        if mol is None:
+            continue
+
+        num_atoms = mol.GetNumAtoms()
+
+        # Accumulate residue names or apply generic fallbacks to preserve token alignment
+        if mol.HasProp("RES_NAMES"):
+            aggregated_res_names.extend(mol.GetProp("RES_NAMES").split())
+        else:
+            aggregated_res_names.extend(["UNL"] * num_atoms)
+
+        # Accumulate residue numbers or apply generic fallbacks
+        if mol.HasProp("RES_NUMS"):
+            aggregated_res_nums.extend(mol.GetProp("RES_NUMS").split())
+        else:
+            aggregated_res_nums.extend(["1"] * num_atoms)
+
+        # Retain the first valid box tensor encountered in the file
+        if global_box_tensor is None and mol.HasProp("BOX_TENSOR"):
+            global_box_tensor = mol.GetProp("BOX_TENSOR")
+
         if rd_combined_mol is None:
             rd_combined_mol = mol
         else:
             rd_combined_mol = Chem.CombineMols(rd_combined_mol, mol)
+
+    # Re-inject the fully combined sequence properties back into the root molecule object
+    if rd_combined_mol is not None:
+        rd_combined_mol.SetProp("RES_NAMES", " ".join(aggregated_res_names))
+        rd_combined_mol.SetProp("RES_NUMS", " ".join(aggregated_res_nums))
+        if global_box_tensor is not None:
+            rd_combined_mol.SetProp("BOX_TENSOR", global_box_tensor)
+
+    # OpenBabel parsing pipeline handles multiple blocks naturally via += operations
     ob_combined_mol = ob.OBMol()
     obConversion = ob.OBConversion()
     obConversion.SetInFormat("sdf")
@@ -26,9 +61,9 @@ def sdf_load_all_as_one(input_path):
         ob_combined_mol += ob_mol
         ob_mol = ob.OBMol()
         notatend = obConversion.Read(ob_mol)
-
-    success = rd_combined_mol.GetNumAtoms() == ob_combined_mol.NumAtoms()
-    Chem.SanitizeMol(rd_combined_mol)
+    success = rd_combined_mol.GetNumAtoms() == ob_combined_mol.NumAtoms() if rd_combined_mol else False
+    if rd_combined_mol:
+        Chem.SanitizeMol(rd_combined_mol)
     return rd_combined_mol, ob_combined_mol, success
 
 
@@ -132,6 +167,6 @@ def molecule_reader(input_path):
         max_coords = np.max(coordinates, axis=0)
         min_coords = np.min(coordinates, axis=0)
         dx, dy, dz = max_coords - min_coords + 5.0
-        box_tensor = [dx, 0.0, 0.0, 0.0, dy, 0.0, 0.0, 0.0, dz]
+        box_tensor = [dx, dy, dz, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
     return obmol, rdmol, coordinates, res_names, res_ids, box_tensor

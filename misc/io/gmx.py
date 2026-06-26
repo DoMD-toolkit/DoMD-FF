@@ -1,4 +1,35 @@
-def write_gro_file(output_path, coordinates, res_names, res_ids, box_tensor):
+import os.path
+
+
+def map_unique_atomtypes(params_atom):
+    """
+    get unique atomtypes by (epsilon, sigma, atomic_number) to avoid duplicate atomtypes in [ atomtypes ] block of .top/.itp file
+    name the unique atomtype by domd_xxx while xxx is the unique idx
+    return unique_atomtypes: {atom_idx: atomtypes_name}
+    """
+    atomidx2typeset = {}
+    unique_atomtypes = {}
+    atomtype2atom = {}
+    params_set = set()
+    for atom_idx, o_atom in params_atom.items():
+        key = (o_atom.epsilon, o_atom.sigma, o_atom.element)
+        params_set.add(key)
+        atomidx2typeset[atom_idx] = key
+        atomtype2atom[key] = o_atom
+    if len(params_set) >= 1000:
+        d = 4
+    else:
+        d = 3
+    type2name = {}
+    for i, key in enumerate(params_set):
+        type2name[key] = f"domd_{i:0>{d}d}"
+        unique_atomtypes[f"domd_{i:0>{d}d}"] = atomtype2atom[key]
+    atomidx2atomtypes = {}
+    for atom_idx, key in atomidx2typeset.items():
+        atomidx2atomtypes[atom_idx] = type2name[key]
+    return unique_atomtypes, atomidx2atomtypes
+
+def write_gro_file(output_path, coordinates, res_names, res_ids, box_tensor, atom_names=[]):
     """
     高性能 GROMACS .gro 写出器
     支持千万级原子，自动处理 5 位宽数字溢出回绕，严格匹配 GROMACS 格式。
@@ -7,32 +38,34 @@ def write_gro_file(output_path, coordinates, res_names, res_ids, box_tensor):
         coordinates: Nx3 的 numpy 数组 (单位: 埃)
         res_names: 长度为 N 的残基名列表
         res_ids: 长度为 N 的真实残基 ID 列表 (允许百万级)
-        box_tensor: 长度为 9 的盒子张量 (单位: 埃)
+        box_tensor: length of 9 ordered in v1(x) v2(y) v3(z) v1(y) v1(z) v2(x) v2(z) v3(x) v3(y) (unit: A)
+                    or length of 3 ordered in boxl_x, boxl_y, boxl_z
     """
     num_atoms = len(coordinates)
 
     # 1. 转换盒子张量为 GROMACS 的纳米 (nm) 单位
-    # box_tensor 顺序: v1x v2y v3z v1y v1z v2x v2z v3x v3y
+    # box_tensor 顺序: v1(x) v2(y) v3(z) v1(y) v1(z) v2(x) v2(z) v3(x) v3(y)
+    if len(box_tensor) < 9:
+        box_tensor = list(box_tensor) + [0.0] * (9 - len(box_tensor))
     # 我们将其转为 nm 并格式化
     tensor_nm = [x / 10.0 for x in box_tensor]
 
     # 判断是否为标准正交盒子 (非对角线元素极小)
     is_orthogonal = (
-            abs(tensor_nm[1]) < 1e-4 and abs(tensor_nm[2]) < 1e-4 and
-            abs(tensor_nm[3]) < 1e-4 and abs(tensor_nm[5]) < 1e-4 and
-            abs(tensor_nm[6]) < 1e-4 and abs(tensor_nm[7]) < 1e-4
+            abs(tensor_nm[3]) < 1e-4 and abs(tensor_nm[6]) < 1e-4 and
+            abs(tensor_nm[4]) < 1e-4 and abs(tensor_nm[7]) < 1e-4 and
+            abs(tensor_nm[5]) < 1e-4 and abs(tensor_nm[8]) < 1e-4
     )
 
     if is_orthogonal:
-        # 正交盒子仅需输出 3 个对角线元素
-        box_line = f"{tensor_nm[0]:10.5f}{tensor_nm[4]:10.5f}{tensor_nm[8]:10.5f}\n"
+        box_line = f"{tensor_nm[0]:10.5f} {tensor_nm[1]:10.5f} {tensor_nm[2]:10.5f}\n"
     else:
         # 斜方/三斜盒子需要输出全部 9 个分量
         # GROMACS 规定的标准顺序: v1x v2y v3z v1y v1z v2x v2z v3x v3y
         box_line = (
-            f"{tensor_nm[0]:10.5f}{tensor_nm[4]:10.5f}{tensor_nm[8]:10.5f}"
-            f"{tensor_nm[1]:10.5f}{tensor_nm[2]:10.5f}{tensor_nm[3]:10.5f}"
-            f"{tensor_nm[6]:10.5f}{tensor_nm[7]:10.5f}{tensor_nm[5]:10.5f}\n"
+            f"{tensor_nm[0]:10.5f} {tensor_nm[4]:10.5f} {tensor_nm[8]:10.5f} "
+            f"{tensor_nm[1]:10.5f} {tensor_nm[2]:10.5f} {tensor_nm[3]:10.5f} "
+            f"{tensor_nm[6]:10.5f} {tensor_nm[7]:10.5f} {tensor_nm[5]:10.5f}\n"
         )
 
     # 2. 写入文件（采用 Buffer 写入提高千万级大体系的 IO 效率）
@@ -51,7 +84,7 @@ def write_gro_file(output_path, coordinates, res_names, res_ids, box_tensor):
             # 名字严格截断至 5 字符
             r_name = str(res_names[i])[:5]
             # 为原子生成一个不超宽的占位名（如 C1, H20 等）
-            a_name = f"A{i + 1}"[:5]
+            a_name = atom_names[i][:5] if i < len(atom_names) else f"A{i+1}"[:5]
 
             # 坐标转换 (埃 -> nm)
             x_nm = coordinates[i][0] / 10.0
@@ -60,34 +93,36 @@ def write_gro_file(output_path, coordinates, res_names, res_ids, box_tensor):
 
             # 严格按照 GRO 标准固定列宽： %5d%-5s%5s%5d%8.3f%8.3f%8.3f
             f.write(f"{res_id_safe:5d}{r_name:<5}{a_name:>5}{atom_id_safe:5d}{x_nm:8.3f}{y_nm:8.3f}{z_nm:8.3f}\n")
-
         # 最后一行：盒子向量
         f.write(box_line)
 
     # print(f" GRO 文件写出成功: {output_path}")
 
 
-def write_top_file(output_path, params_atom, params_bonded, params_improper, res_names, res_ids):
+def write_top_file(output_path, ff, res_names, res_ids, unique_atomtypes=None, atomidx2atomtype=None):
     """
     工业级 GROMACS .top 拓扑文件写出器
     支持百万/千万级超大体系，支持 OPLS-AA 力场参数的原子类型自动去重。
 
     参数:
         output_path (str): 输出的 .top 文件路径
-        params_atom (dict): {int_idx: OPLSAtom} 映射
-        params_bonded (dict): {(idx1, idx2): OPLSBond, (idx1, idx2, idx3): OLSAngle, ...} 映射
-        params_improper (dict): {(idx1, idx2, idx3, idx4): OPLSImproper} 映射
+        ff (ForceField): 已经 setup 好的 OPLS ForceField 对象
         res_names (list): 每个原子的自定义残基名字符串列表
         res_ids (list): 每个原子的真实大残基编号列表 (可达百万)
-        box_tensor (list): 长度为 9 的盒子张量 (单位: 埃)
+        unique_atomtypes (dict, optional): 预先计算的唯一 atomtypes 映射 {atomtype_name: OPLSAtom}
+        atomidx2atomtype (dict, optional): 预先计算的原子索引到 atomtype 名称的映射 {atom_idx: atomtype_name}
     """
     # 1. 提炼去重所有的 atomtypes (非键参数部分)
     # 因为不同的原子会共用同一种 OPLS 类型（例如多肽里有很多类似的 C 或 H），
     # 在 [ atomtypes ] 块中相同的 bond_type 只能出现一次。
-    unique_atomtypes = {}
-    for atom_idx, o_atom in params_atom.items():
-        if o_atom.bond_type not in unique_atomtypes:
-            unique_atomtypes[o_atom.bond_type] = o_atom
+    #unique_atomtypes = {}
+    #for atom_idx, o_atom in params_atom.items():
+    #    if o_atom.bond_type not in unique_atomtypes:
+    #        unique_atomtypes[o_atom.bond_type] = o_atom
+    params_atom, params_bonded, params_improper = ff.params
+    charges = ff.charges
+    if unique_atomtypes is None and atomidx2atomtype is None:
+        unique_atomtypes, atomidx2atomtype = map_unique_atomtypes(params_atom)
 
     # 2. 对键合项（Bonds, Angles, Dihedrals）按元组长度进行分类提取
     bonds_list = []
@@ -104,10 +139,12 @@ def write_top_file(output_path, params_atom, params_bonded, params_improper, res
 
     # 3. 开启高效的缓冲流写入文件
     with open(output_path, 'w', buffering=65536) as f:
-        f.write("; ==================================================================\n")
-        f.write("; Topology file generated by High-Performance MD Toolset (OPLS-AA)\n")
-        f.write("; ==================================================================\n\n")
-
+        f.write(";---------------------------------------------\n")
+        f.write(";        Generated with ChemFAST\n")
+        f.write(";            Hu-Jun Qian Lab\n")
+        f.write(";       Author: lmy23@mails.jlu.edu.cn\n")
+        f.write(";       OPLS Force Field from ChemFAST\n")
+        f.write(";---------------------------------------------\n\n")
         # --- [ defaults ] 块 ---
         # OPLS-AA 标准设置：组合规则选用 3 (Geometric 几何平均)，1-4相互作用缩放因数：1.0 0.5 0.5
         f.write("[ defaults ]\n")
@@ -117,12 +154,12 @@ def write_top_file(output_path, params_atom, params_bonded, params_improper, res
         # --- [ atomtypes ] 块 ---
         f.write("[ atomtypes ]\n")
         f.write("; name   bond_type     mass       charge   ptype          sigma        epsilon\n")
-        for b_type, o_atom in unique_atomtypes.items():
+        for a_type, o_atom in unique_atomtypes.items():
             # 注意：OPLSAtom 里的 sigma 和 epsilon 通常是埃和 kcal/mol。
             # 如果你的力场类 FF 传出的已经是 GROMACS 标准单位（nm 和 kJ/mol），则直接写入。
             # 这里假定传入的 sigma 和 epsilon 已转换为标准 nm 和 kJ/mol（若没有，需在此处 /10.0 或 *4.184）
             f.write(
-                f"  {b_type:<8} {o_atom.bond_type:<8} {o_atom.mass:>10.4f} {o_atom.charge:>8.4f} {o_atom.ptype:<3} {o_atom.sigma:>14.6e} {o_atom.epsilon:>14.6e}\n")
+                f"  {a_type:<8} {o_atom.bond_type:<8} {o_atom.mass:>10.4f} {o_atom.charge:>8.4f} {o_atom.ptype:<3} {o_atom.sigma:>14.6e} {o_atom.epsilon:>14.6e}\n")
         f.write("\n")
 
         # --- [ moleculetype ] 块 ---
@@ -143,20 +180,20 @@ def write_top_file(output_path, params_atom, params_bonded, params_improper, res
             r_num = res_ids[i]
             r_name = str(res_names[i])[:5]
             # 生成与 .gro 中一致的占位原子名
-            a_name = f"A{atom_idx}"[:5]
+            a_name = f"{o_atom.element}"
 
             # cgnr 是电荷组编号，大体系通常让它等于原子序号即可
             f.write(
-                f"{atom_idx:>6} {o_atom.bond_type:>10} {r_num:>6} {r_name:>6} {a_name:>6} {atom_idx:>6} {o_atom.charge:>10.4f} {o_atom.mass:>10.4f}\n")
+                f"{atom_idx:>6} {atomidx2atomtype[i]:>10} {r_num:>6} {r_name:>6} {a_name:>6} {atom_idx:>6} {charges[i]:>10.4f} {o_atom.mass:>10.4f}\n")
         f.write("\n")
 
-        # --- [ bonds ] 块 ---
         if bonds_list:
             f.write("[ bonds ]\n")
             f.write(";  ai    aj funct            r0             k\n")
             for b in bonds_list:
-                # ftype 通常为 1 (标准谐振势)
-                f.write(f"{b.indices[0]:>5} {b.indices[1]:>5} {b.ftype:>5} {b.r0:>14.6e} {b.k:>14.6e}\n")
+                ai = b.indices[0] + 1
+                aj = b.indices[1] + 1
+                f.write(f"{ai:>5} {aj:>5} {b.ftype:>5} {b.r0:>14.6e} {b.k:>14.6e}\n")
             f.write("\n")
 
         # --- [ angles ] 块 ---
@@ -164,9 +201,9 @@ def write_top_file(output_path, params_atom, params_bonded, params_improper, res
             f.write("[ angles ]\n")
             f.write(";  ai    aj    ak funct            t0             k\n")
             for a in angles_list:
-                # ftype 通常为 1 (标准角度谐振势)
+                ai, aj, ak = a.indices[0] + 1, a.indices[1] + 1, a.indices[2] + 1
                 f.write(
-                    f"{a.indices[0]:>5} {a.indices[1]:>5} {a.indices[2]:>5} {a.ftype:>5} {a.t0:>14.6e} {a.k:>14.6e}\n")
+                    f"{ai:>5} {aj:>5} {ak:>5} {a.ftype:>5} {a.t0:>14.6e} {a.k:>14.6e}\n")
             f.write("\n")
 
         # --- [ dihedrals ] 块 (标准二面角) ---
@@ -175,22 +212,30 @@ def write_top_file(output_path, params_atom, params_bonded, params_improper, res
             f.write(
                 ";  ai    aj    ak    al funct          c0            c1            c2            c3            c4            c5\n")
             for d in dihedrals_list:
-                # OPLS-AA 二面角 ftype 通常为 3 (Ryckaert-Bellemans 势能项)
-                f.write(f"{d.indices[0]:>5} {d.indices[1]:>5} {d.indices[2]:>5} {d.indices[3]:>5} {d.ftype:>5} "
+                ai, aj, ak, al = d.indices[0] + 1, d.indices[1] + 1, d.indices[2] + 1, d.indices[3] + 1
+                f.write(f"{ai:>5} {aj:>5} {ak:>5} {al:>5} {d.ftype:>5} "
                         f"{d.c0:>13.5e} {d.c1:>13.5e} {d.c2:>13.5e} {d.c3:>13.5e} {d.c4:>13.5e} {d.c5:>13.5e}\n")
             f.write("\n")
 
-        # --- [ dihedrals ] 块 (Improper 不恰当二面角/非平面扭转) ---
+        # --- [ dihedrals ] 块 (Improper 非平面扭转) ---
         if params_improper:
-            f.write("[ dihedrals ] ; Improper\n")
+            f.write("; Improper\n")
             f.write(";  ai    aj    ak    al funct    (parameters)\n")
             for imp in params_improper.values():
-                # OPLS-AA Improper 通常使用 ftype = 2 或者是 4
-                # 遍历它的具体参数元组/列表写入末尾
+                ai, aj, ak, al = imp.indices[0] + 1, imp.indices[1] + 1, imp.indices[2] + 1, imp.indices[3] + 1
                 param_str = " ".join(f"{x:>14.6e}" if isinstance(x, (int, float)) else str(x) for x in imp.params)
                 f.write(
-                    f"{imp.indices[0]:>5} {imp.indices[1]:>5} {imp.indices[2]:>5} {imp.indices[3]:>5} {imp.ftype:>5} {param_str}\n")
+                    f"{ai:>5} {aj:>5} {ak:>5} {al:>5} {imp.ftype:>5} {param_str}\n")
             f.write("\n")
+
+        if dihedrals_list:
+            f.write("[ pairs ]\n")
+            f.write(";  ai    aj    funct\n")
+            for d in dihedrals_list:
+                ai, aj = d.indices[0] + 1, d.indices[3] + 1
+                f.write(f"{ai:>5} {aj:>5}    1\n")
+                #f.write(f"{d.indices[0]:>5} {d.indices[3]:>5} 1\n")
+
 
         # --- 末尾系统描述模块 ---
         f.write("[ system ]\n")
@@ -199,3 +244,192 @@ def write_top_file(output_path, params_atom, params_bonded, params_improper, res
         f.write("[ molecules ]\n")
         f.write("; Compound        #mols\n")
         f.write("SystemMolecule    1\n")
+
+def write_itp_file(output_path, ff, res_names, res_ids, mol_name="MOL", unique_atomtypes=None, atomidx2atomtype=None, write_atomtypes=False):
+    """
+    高通量 ChemFAST .itp 分子拓扑文件写出器
+    仿照 LigParGen 经典格式输出，保留 [ defaults ] 与 [ atomtypes ] 块，方便小分子参数独立移植。
+
+    参数:
+        output_path (str): 输出的 .itp 文件路径
+        ff (ForceField): 已经 setup 好的 OPLS ForceField 对象
+        res_names (list): 每个原子的自定义残基名字符串列表
+        res_ids (list): 每个原子的真实大残基编号列表
+        mol_name (str): 该分子的拓扑物种名称 (用于 [ moleculetype ])
+    """
+    # 1. 提炼去重所有的 atomtypes (非键参数部分)
+    params_atom, params_bonded, params_improper = ff.params
+    charges = ff.charges
+    if unique_atomtypes is None and atomidx2atomtype is None:
+        unique_atomtypes, atomidx2atomtype = map_unique_atomtypes(params_atom)
+
+    # 2. 对键合项（Bonds, Angles, Dihedrals）按元组长度进行分类提取
+    bonds_list = []
+    angles_list = []
+    dihedrals_list = []
+
+    for indices, item in params_bonded.items():
+        if len(indices) == 2:
+            bonds_list.append(item)
+        elif len(indices) == 3:
+            angles_list.append(item)
+        elif len(indices) == 4:
+            dihedrals_list.append(item)
+
+    # 3. 开启高效的缓冲流写入文件
+    with open(output_path, 'w', buffering=65536) as f:
+        # --- 仿照 LigParGen 定制的 ChemFAST 专属标头 ---
+        f.write(";---------------------------------------------\n")
+        f.write(";        Generated with ChemFAST\n")
+        f.write(";            Hu-Jun Qian Lab\n")
+        f.write(";       Author: lmy23@mails.jlu.edu.cn\n")
+        f.write(";       OPLS Force Field from ChemFAST\n")
+        f.write(";---------------------------------------------\n\n")
+        if write_atomtypes:
+        # --- [ defaults ] 块 ---
+            f.write("[ defaults ]\n")
+            f.write("; nbfunc        comb-rule       gen-pairs       fudgeLJ         fudgeQQ\n")
+            f.write("  1             3               yes             0.5             0.5\n\n")
+
+            # --- [ atomtypes ] 块 ---
+            f.write("[ atomtypes ]\n")
+            f.write("; name   bond_type     mass       charge   ptype          sigma        epsilon\n")
+            for a_type, o_atom in unique_atomtypes.items():
+                f.write(
+                    f"  {a_type:<8} {o_atom.bond_type:<8} {o_atom.mass:>10.4f} {o_atom.charge:>8.4f} {o_atom.ptype:<3} {o_atom.sigma:>14.6e} {o_atom.epsilon:>14.6e}\n")
+            f.write("\n")
+
+        # --- [ moleculetype ] 块 ---
+        f.write("[ moleculetype ]\n")
+        f.write("; Name            nrexcl\n")
+        f.write(f"{mol_name:<16} 3\n\n")
+
+        # --- [ atoms ] 块 ---
+        f.write("[ atoms ]\n")
+        f.write(";   nr       type  resnr residue  atom   cgnr     charge       mass\n")
+        for i in range(len(params_atom)):
+            atom_idx = i + 1
+            o_atom = params_atom[i]
+            r_num = res_ids[i]
+            r_name = str(res_names[i])[:5]
+            a_name = f"{o_atom.element}"
+
+            f.write(
+                f"{atom_idx:>6} {atomidx2atomtype[i]:>10} {r_num:>6} {r_name:>6} {a_name:>6} {atom_idx:>6} {charges[i]:>10.4f} {o_atom.mass:>10.4f}\n")
+        f.write("\n")
+
+        # --- [ bonds ] 块 ---
+        if bonds_list:
+            f.write("[ bonds ]\n")
+            f.write(";  ai    aj funct            r0             k\n")
+            for b in bonds_list:
+                ai = b.indices[0] + 1
+                aj = b.indices[1] + 1
+                f.write(f"{ai:>5} {aj:>5} {b.ftype:>5} {b.r0:>14.6e} {b.k:>14.6e}\n")
+            f.write("\n")
+
+        # --- [ angles ] 块 ---
+        if angles_list:
+            f.write("[ angles ]\n")
+            f.write(";  ai    aj    ak funct            t0             k\n")
+            for a in angles_list:
+                ai, aj, ak = a.indices[0] + 1, a.indices[1] + 1, a.indices[2] + 1
+                f.write(
+                    f"{ai:>5} {aj:>5} {ak:>5} {a.ftype:>5} {a.t0:>14.6e} {a.k:>14.6e}\n")
+            f.write("\n")
+
+        # --- [ dihedrals ] 块 (标准二面角) ---
+        if dihedrals_list:
+            f.write("[ dihedrals ]\n")
+            f.write(
+                ";  ai    aj    ak    al funct          c0            c1            c2            c3            c4            c5\n")
+            for d in dihedrals_list:
+                ai, aj, ak, al = d.indices[0] + 1, d.indices[1] + 1, d.indices[2] + 1, d.indices[3] + 1
+                f.write(f"{ai:>5} {aj:>5} {ak:>5} {al:>5} {d.ftype:>5} "
+                        f"{d.c0:>13.5e} {d.c1:>13.5e} {d.c2:>13.5e} {d.c3:>13.5e} {d.c4:>13.5e} {d.c5:>13.5e}\n")
+            f.write("\n")
+
+        # --- [ dihedrals ] 块 (Improper 非平面扭转) ---
+        if params_improper:
+            f.write("; Improper\n")
+            f.write(";  ai    aj    ak    al funct    (parameters)\n")
+            for imp in params_improper.values():
+                ai, aj, ak, al = imp.indices[0] + 1, imp.indices[1] + 1, imp.indices[2] + 1, imp.indices[3] + 1
+                param_str = " ".join(f"{x:>14.6e}" if isinstance(x, (int, float)) else str(x) for x in imp.params)
+                f.write(
+                    f"{ai:>5} {aj:>5} {ak:>5} {al:>5} {imp.ftype:>5} {param_str}\n")
+            f.write("\n")
+
+        # --- [ pairs ] 块 ---
+        if dihedrals_list:
+            f.write("[ pairs ]\n")
+            f.write(";  ai    aj    funct\n")
+            for d in dihedrals_list:
+                ai, aj = d.indices[0] + 1, d.indices[3] + 1
+                f.write(f"{ai:>5} {aj:>5}     1\n")
+
+def write_atomtypes_head(output_path, unique_atomtypes):
+    """
+    写出 [ atomtypes ] 块的头部信息，供 .top 或 .itp 文件使用。
+    """
+    with open(output_path, 'w', buffering=65536) as f:
+        f.write("[ atomtypes ]\n")
+        f.write("; name   bond_type     mass       charge   ptype          sigma        epsilon\n")
+        for a_type, o_atom in unique_atomtypes.items():
+            f.write(
+                f"  {a_type:<8} {o_atom.bond_type:<8} {o_atom.mass:>10.4f} {o_atom.charge:>8.4f} {o_atom.ptype:<3} {o_atom.sigma:>14.6e} {o_atom.epsilon:>14.6e}\n")
+        f.write("\n")
+
+def write_top_file_with_includes(output_path, atomtypes_itp, mol_itp_mapping, mol_counts, mol_names, system_name="ChemFAST Parametrized Molecular System"):
+    """
+    Master GROMACS .top file generator using the #include format.
+    Assembles global defaults, atomtypes, and molecule-specific topologies.
+
+    Parameters:
+        output_path (str): Target path for the generated master .top file.
+        atomtypes_itp (str): File path or filename of the shared atomtypes itp file.
+        mol_itp_mapping (dict): Mapping of molecule identifier/name to its .itp file path.
+                                e.g., {0: "top/mol1.itp", 1: "top/mol2.itp"}
+        mol_counts (dict): Mapping of molecule identifier/name to its stoichiometric count.
+                           e.g., {0: 100, 1: 50}
+        mol_names (dict): Mapping of molecule identifier/name to its descriptive name.
+                           e.g., {0: "Water", 1: "Ethanol"}
+        system_name (str): Character description of the molecular system.
+    """
+    atomtypes_itp = os.path.basename(atomtypes_itp)  # Ensure only the filename is used in the include directive
+    mol_idx = sorted(mol_itp_mapping.keys())
+    for mol_id in mol_idx:
+        mol_itp_mapping[mol_id] = os.path.basename(mol_itp_mapping[mol_id])  # Ensure only the filename is used
+    with open(output_path, 'w', buffering=65536) as f:
+        f.write("; ==================================================================\n")
+        f.write("; Master topology file generated by ChemFAST\n")
+        f.write("; ==================================================================\n\n")
+
+        # --- [ defaults ] block ---
+        # Standard OPLS-AA configuration: combination rule 3, 1-4 scaling factors
+        f.write("[ defaults ]\n")
+        f.write("; nbfunc        comb-rule       gen-pairs       fudgeLJ         fudgeQQ\n")
+        f.write("  1             3               yes             0.5             0.5\n\n")
+
+        # --- Include atomtypes ---
+        f.write("; Include global non-bonded parameters\n")
+        f.write(f'#include "{atomtypes_itp}"\n\n')
+
+        # --- Include molecule topologies ---
+        f.write("; Include individual molecule bonded topologies\n")
+        for mol_id in mol_idx:
+            itp_path = mol_itp_mapping[mol_id]
+            f.write(f'#include "{itp_path}"\n')
+        f.write("\n")
+
+        # --- [ system ] block ---
+        f.write("[ system ]\n")
+        f.write(f"{system_name}\n\n")
+
+        # --- [ molecules ] block ---
+        f.write("[ molecules ]\n")
+        f.write("; Compound        #mols\n")
+        for mol_id in mol_idx:
+            count = mol_counts[mol_id]
+            mol_name = mol_names[mol_id]
+            f.write(f"{mol_name:<16} {count}\n")

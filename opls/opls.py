@@ -12,11 +12,12 @@ from opls.functions import (
     match_improper_by_gmx_rule,
     match_atom_by_boss_db,
     match_bonded_by_boss_db,
+    match_params_ml
 )
 from opls.opls_db import opls_db
 
 THRESHOLD_L = 5000
-THRESHOLD_H = 20000
+THRESHOLD_H = 5000
 
 
 def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True, useBOSS=False, useML=False, overwrite=False):
@@ -32,11 +33,25 @@ def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True, useBOSS=Fal
             logger.warn(f"The target molecule has more than {THRESHOLD_L} atoms, "
                         f"but I can't turn it into an OBMol, the template searching "
                         f"will be performed with rdkit, which may be extremely slow.")
-    if n_atoms > THRESHOLD_H:
+    if n_atoms > THRESHOLD_H and useGMX:
         logger.warn(f"The target molecule has more than {THRESHOLD_H} atoms, template method is not available."
                     f"I'll set `useGMX=False`.")
         useGMX = False
+    if useML:
+        # 1. Base check for total atom count
+        if n_atoms < 4:
+            useML = False
+        else:
+            # 2. Advanced check: ensure at least one sequential 4-atom chain exists (3 contiguous bonds)
+            # length=3 with useBonds=True searches for paths consisting of exactly 3 sequential bonds (A-B-C-D)
+            has_dihedral = len(Chem.FindAllPathsOfLengthN(rdmol, 3, useBonds=True)) > 0
 
+            if not has_dihedral:
+                logger.warning(
+                    f"The molecule contains {n_atoms} atoms but lacks a sequential 4-atom pathway. "
+                    f"No chemical dihedral angle can be defined. Disabling useML."
+                )
+                useML = False
     params_atoms = {}
     params_bonded = {}
     params_impropers = {}
@@ -54,7 +69,7 @@ def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True, useBOSS=Fal
     missing_bonded = set.union(set(bond_idx), set(angle_idx), set(dihedral_idx))
     missing_impropers = set(improper_idx)
 
-    logger.warn(f"Overwrite mode is {overwrite}, if `overwrite=True`, the each method will find all parameters "
+    logger.info(f"Overwrite mode is {overwrite}, if `overwrite=True`, the each method will find all parameters "
                 f"(GMX->BOSS->ML) independently, and overwrites existing matches of previous methods. "
                 f"If `overwrite=False`, the next method will only try to find missing types of the former methods.")
 
@@ -73,7 +88,7 @@ def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True, useBOSS=Fal
             opls_gmx_atoms, missing_gmx_atoms = match_by_gmx_rule(rdmol)
 
         if len(missing_gmx_atoms) > 0:
-            logger.warn(f"(GMX finder) Missing/Total {len(missing_gmx_atoms)}/{rdmol.GetNumAtoms} "
+            logger.warn(f"(GMX finder) Missing/Total {len(missing_gmx_atoms)}/{rdmol.GetNumAtoms()} "
                         f"atom types for GMX template search!")
         if not overwrite:
             # if overwrite=False, the next method only finds the missing of previous methods
@@ -165,9 +180,9 @@ def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True, useBOSS=Fal
         params_atoms.update(opls_ml_atoms)
         params_bonded.update(opls_ml_bonded)
         params_impropers.update(opls_ml_improper)
-    logger.info(f"Total Found atoms/Total atoms: {len(params_atoms)}/{rdmol.GetNumAtoms()}")
+    logger.error(f"Total Found atoms/Total atoms: {len(params_atoms)}/{rdmol.GetNumAtoms()}")
     m_b, m_a, m_d = count_bonded(params_bonded)
-    logger.info(f"Found bonds/Total angles/Total dihedrals/total impropers/total: {m_b}/{len(bond_idx)}"
+    logger.error(f"Found bonds/Total angles/Total dihedrals/Total impropers/Total: {m_b}/{len(bond_idx)}"
                 f" {m_a}/{len(angle_idx)} {m_d}/{len(dihedral_idx)} {len(params_impropers)}/{len(improper_idx)}")
 
     success = (len(params_atoms) == rdmol.GetNumAtoms() and m_b == len(bond_idx) and m_a == len(

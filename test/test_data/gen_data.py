@@ -74,25 +74,37 @@ def generate_perfect_separated_test_systems(pdb_out="test_system.pdb", sdf_out="
         info.SetName(f"{atom.GetSymbol()}{i + 1}".ljust(4))
         atom.SetMonomerInfo(info)
 
-
     a, b, c = 40.0, 40.0, 40.0
     alpha, beta, gamma = 75.0, 85.0, 105.0
 
+    # Convert angles to radians
     alpha_rad = np.radians(alpha)
     beta_rad = np.radians(beta)
     gamma_rad = np.radians(gamma)
 
-    v1 = [a, 0.0, 0.0]
+    # Compute tensor components satisfying GROMACS constraints (v1_y = v1_z = v2_z = 0)
+    v1_x = a
     v2_x = b * np.cos(gamma_rad)
     v2_y = b * np.sin(gamma_rad)
-    v2 = [v2_x, v2_y, 0.0]
 
     v3_x = c * np.cos(beta_rad)
     v3_y = c * (np.cos(alpha_rad) - np.cos(beta_rad) * np.cos(gamma_rad)) / np.sin(gamma_rad)
     v3_z = np.sqrt(c ** 2 - v3_x ** 2 - v3_y ** 2)
-    v3 = [v3_x, v3_y, v3_z]
 
-    box_tensor = v1 + v2 + v3
+    # Rearrange into GROMACS standard layout:
+    # v1(x) v2(y) v3(z) v1(y) v1(z) v2(x) v2(z) v3(x) v3(y)
+    box_tensor = [
+        v1_x,  # v1(x)
+        v2_y,  # v2(y)
+        v3_z,  # v3(z)
+        0.0,  # v1(y)
+        0.0,  # v1(z)
+        0.0,  # v2(x)
+        0.0,  # v2(z)
+        0.0,  # v3(x)
+        0.0  # v3(y)
+    ]
+    print("Box tensor:", " ".join([str(i) for i in box_tensor]))
 
     cryst1_line = f"CRYST1{a:9.3f}{b:9.3f}{c:9.3f}{alpha:7.2f}{beta:7.2f}{gamma:7.2f} P 1           1\n"
     pdb_block = Chem.MolToPDBBlock(combined_mol, flavor=4)

@@ -21,6 +21,11 @@ from opls._misc import (
     OPLSDihedral,
     OPLSImproper
 )
+
+from opls.opls_ml._preprocess import mol2torch_graph
+from opls.opls_ml import atom_model, charge_model, bond_model, angle_model, dihedral_model, improper_model
+
+
 from misc.logger import logger
 
 __this_dir__ = os.path.dirname(os.path.abspath(__file__))
@@ -150,6 +155,7 @@ def match_atom_by_boss_db(rdmol: Chem.Mol, hashes: dict, database, cache: dict, 
         idx = atom.GetIdx()
         atom_hash = hashes[idx]  # now np.ndarray
         hash_str = np.packbits(atom_hash).tobytes()
+        #print(atom_hash.shape)
         if cache.get(hash_str) is not None:
             if cache.get(hash_str):
                 ret_atom = cache.get(hash_str)
@@ -632,3 +638,37 @@ def match_improper_by_gmx_rule(params_atoms, improper_idx):
         else:
             params[ret.indices] = ret
     return params, missing
+
+def match_params_ml(rdmol: Chem.Mol, missing_atoms, missing_bonded, missing_impropers):
+    atom_params = {}
+    bonded_params = {}
+    improper_params = {}
+    missing = {}
+    mol_graph, bond_graph, angle_graph = mol2torch_graph(rdmol)
+    if mol_graph is None:
+        logger.error("Failed to convert molecule to graph for ML prediction.")
+        return atom_params, bonded_params, improper_params
+    atomtypes = atom_model(mol_graph,rdmol)
+    impropers = improper_model(mol_graph, rdmol)
+    if bond_graph is not None:
+        bonds = bond_model(mol_graph, rdmol)
+    else:
+        bonds = {}
+    if angle_graph is not None:
+        angles = angle_model(bond_graph, rdmol)
+        dihedrals = dihedral_model(angle_graph, rdmol)
+    else:
+        angles = {}
+        dihedrals = {}
+    for atom_idx in missing_atoms:
+        atom_params[atom_idx] = atomtypes[atom_idx]
+    for bond_idx in missing_bonded:
+        if len(bond_idx) == 2:
+            bonded_params[bond_idx] = bonds.get(bond_idx)
+        if len(bond_idx) == 3:
+            bonded_params[bond_idx] = angles.get(bond_idx)
+        if len(bond_idx) == 4:
+            bonded_params[bond_idx] = dihedrals.get(bond_idx)
+    for improper_idx in missing_impropers:
+        improper_params[improper_idx] = impropers.get(improper_idx)
+    return atom_params, bonded_params, improper_params

@@ -1,3 +1,5 @@
+import sys
+sys.path.append('E:\\downloads\\article\\high_throughput_system\\software\\DoMDv1.0.2\\DoMD-FF')
 import os
 from openbabel import pybel as pb
 import numpy as np
@@ -15,6 +17,7 @@ logger.propagate = True
 
 
 def align_molecule_order(mol_A, mol_B):
+    # size should be limited for match
     match = mol_B.GetSubstructMatch(mol_A, useChirality=True)
 
     if not match:
