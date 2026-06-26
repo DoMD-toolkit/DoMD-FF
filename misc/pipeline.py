@@ -29,12 +29,17 @@ def _extract_mol_metadata(mol):
     return coordinates, res_names, res_ids, box_tensor
 
 
-def run_itp_mode(mols, output_dir, obmols=None, molecule_name=None):
+def run_itp_mode(mols, output_dir='.', obmols=None, molecule_name=None):
     """
     Case 1: itp mode
     Receives a Python list of single RDKit molecule objects.
     Strictly validates the single-fragment connectivity of each item.
     Outputs independent .itp and .gro files along with integrated master files.
+    :: params
+        mols: list of RDKit molecule objects
+        output_dir: str
+        obmols: list of RDKit molecule objects, defaults to None
+        molecule_name: list of strings, also the filename of itp file
     """
     logger.info("===> Starting itp mode from list of RDKit molecule objects")
     if not os.path.exists(output_dir):
@@ -118,12 +123,17 @@ def run_itp_mode(mols, output_dir, obmols=None, molecule_name=None):
     logger.info("===> itp mode finished successfully.\n")
 
 
-def run_top_mode(rdmol, output_dir, base_name="system", obmol=None):
+def run_top_mode(rdmol, output_dir='.', base_name="system", obmol=None):
     """
     Case 2: top mode
     Receives a single integrated RDKit molecule object representing the entire system.
     Bypasses connectivity constraints, supporting multi-fragment architectures directly.
     Outputs a standalone monolithic total system .top and .gro file block.
+    :: params
+        rbmol: list of RDKit molecule objects
+        output_dir: str
+        base_name: str, top and gro file name
+        obmol: list of OBMol objects, defaults to None
     """
     logger.info("===> Starting top mode from single system RDKit molecule object")
     if not os.path.exists(output_dir):
