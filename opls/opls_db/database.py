@@ -1,3 +1,4 @@
+import hashlib
 import os
 from typing import Literal
 
@@ -7,7 +8,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.types import TypeDecorator, LargeBinary
-import hashlib
 
 
 class BitStringBinary(TypeDecorator):

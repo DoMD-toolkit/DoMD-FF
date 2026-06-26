@@ -1,13 +1,12 @@
+import logging
 import os
 from openbabel import pybel as pb
-import numpy as np
 
+import numpy as np
 from rdkit import Chem
 from rdkit.Chem import rdMolHash
 
 from ForceField import FF
-
-import logging
 from misc.logger import logger
 
 logger.setLevel(logging.INFO)
@@ -100,7 +99,7 @@ def run_massive_system_pipeline(input_sdf, work_dir, box_tensor=None):
         if rdmol.HasProp("RES_NAMES"):
             res_names = rdmol.GetProp("RES_NAMES").split()
         if rdmol.HasProp("RES_NUMS"):
-            res_ids = encode_by_appearance([int(x) for x in rdmol.GetProp("RES_NUMS").split()]) # remap to [1,1,2,...
+            res_ids = encode_by_appearance([int(x) for x in rdmol.GetProp("RES_NUMS").split()])  # remap to [1,1,2,...
 
         if rdmol.GetNumAtoms() >= 1000:
             mol_registry[f'large_{large_counter}'] = {"ref_rdmol": rdmol,
@@ -196,13 +195,11 @@ def run_massive_system_pipeline(input_sdf, work_dir, box_tensor=None):
                                   info['res_names'], p_atom, p_bonded, p_improper)
         itp_include_lines.append(f'#include "{mol_itp_name}"')
 
-
     atom_types_path = os.path.join(work_dir, "atom_types.itp")
     write_atom_types_itp(atom_types_path, all_unique_atomtypes)
 
     top_path = os.path.join(work_dir, "system.top")
     write_master_top_file(top_path, itp_include_lines, scheme_list)
-
 
 
 def write_gro_file_stream(path, rdmol, coords, res_names, res_ids, box_tensor):
@@ -240,25 +237,26 @@ def write_single_molecule_itp(path, rdmol, mol_name, res_id, res_names, p_atom, 
             idx = atom.GetIdx()
             o_atom = p_atom[idx]
             f.write(
-                f"{idx+1:>6} {o_atom.bond_type:>10} {res_id[idx]:>6} {res_names[idx][:5]:>6} {f'A{idx}'[:5]:>6} {cgrp:>6} {o_atom.charge:>10.4f} {o_atom.mass:>10.4f}\n")
+                f"{idx + 1:>6} {o_atom.bond_type:>10} {res_id[idx]:>6} {res_names[idx][:5]:>6} {f'A{idx}'[:5]:>6} {cgrp:>6} {o_atom.charge:>10.4f} {o_atom.mass:>10.4f}\n")
 
         if bonds:
             f.write("\n[ bonds ]\n")
-            for b in bonds: f.write(f"{b.indices[0]+1:>5} {b.indices[1]+1:>5} {b.ftype:>5} {b.r0:>14.6e} {b.k:>14.6e}\n")
+            for b in bonds: f.write(
+                f"{b.indices[0] + 1:>5} {b.indices[1] + 1:>5} {b.ftype:>5} {b.r0:>14.6e} {b.k:>14.6e}\n")
         if angles:
             f.write("\n[ angles ]\n")
             for a in angles: f.write(
-                f"{a.indices[0]+1:>5} {a.indices[1]+1:>5} {a.indices[2]+1:>5} {a.ftype:>5} {a.t0:>14.6e} {a.k:>14.6e}\n")
+                f"{a.indices[0] + 1:>5} {a.indices[1] + 1:>5} {a.indices[2] + 1:>5} {a.ftype:>5} {a.t0:>14.6e} {a.k:>14.6e}\n")
         if dihedrals:
             f.write("\n[ dihedrals ]\n")
             for d in dihedrals: f.write(
-                f"{d.indices[0]+1:>5} {d.indices[1]+1:>5} {d.indices[2]+1:>5} {d.indices[3]+1:>5} {d.ftype:>5} {d.c0:>13.5e} {d.c1:>13.5e} {d.c2:>13.5e}\n")
+                f"{d.indices[0] + 1:>5} {d.indices[1] + 1:>5} {d.indices[2] + 1:>5} {d.indices[3] + 1:>5} {d.ftype:>5} {d.c0:>13.5e} {d.c1:>13.5e} {d.c2:>13.5e}\n")
         if p_improper:
             f.write("\n[ dihedrals ] ; Improper\n")
             for imp in p_improper.values():
                 p_str = " ".join(f"{x:>14.6e}" for x in imp.params)
                 f.write(
-                    f"{imp.indices[0]+1:>5} {imp.indices[1]+1:>5} {imp.indices[2]+1:>5} {imp.indices[3]+1:>5} {imp.ftype:>5} {p_str}\n")
+                    f"{imp.indices[0] + 1:>5} {imp.indices[1] + 1:>5} {imp.indices[2] + 1:>5} {imp.indices[3] + 1:>5} {imp.ftype:>5} {p_str}\n")
 
 
 def write_master_top_file(path, include_lines, scheme):
@@ -274,6 +272,7 @@ def write_master_top_file(path, include_lines, scheme):
         f.write("\n[ system ]\nAutomated Combined Massive Assembly System\n\n[ molecules ]\n; Compound        #mols\n")
         for mol_name, count in scheme:
             f.write(f"{mol_name:<16}  {count}\n")
+
 
 parse_and_split_system('test_data/test_system.sdf', "test_split_output")
 run_massive_system_pipeline('test_split_output/split_mols_fixed.sdf', 'test_split_output')

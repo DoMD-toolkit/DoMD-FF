@@ -1,35 +1,37 @@
 import math
-from typing import Any, Union
-import tqdm
+from typing import Union
+
 import networkx as nx
 import numpy as np
 import torch
+import tqdm
 from rdkit import Chem
 from rdkit.Chem.rdForceFieldHelpers import GetUFFBondStretchParams, GetUFFAngleBendParams, GetUFFTorsionParams
 from rdkit.Chem.rdPartialCharges import ComputeGasteigerCharges
 from torch_geometric.data import Data
 
 en = {
-    "H": 2.300, "He": 4.160,"Li": 0.912, "Be": 1.576,
-    "B": 2.051, "C": 2.544,"N": 3.066, "O": 3.610,
-    "F": 4.193, "Ne": 4.787,"Na": 0.869, "Mg": 1.293,
-    "Al": 1.613, "Si": 1.916,"P": 2.253, "S": 2.589,
-    "Cl": 2.869, "Ar": 3.242,"K": 0.734, "Ca": 1.034,
-    "Sc": 1.19, "Ti": 1.38,"V": 1.53, "Cr": 1.65,
-    "Mn": 1.75, "Fe": 1.80,"Co": 1.84, "Ni": 1.88,
-    "Cu": 1.85, "Zn": 1.588,"Ga": 1.756, "Ge": 1.994,
-    "As": 2.211, "Se": 2.424,"Br": 2.685, "Kr": 2.966,
-    "Rb": 0.706, "Sr": 0.963,"Y": 1.12, "Zr": 1.32,
-    "Nb": 1.41, "Mo": 1.47,"Tc": 1.51, "Ru": 1.54,
-    "Rh": 1.56, "Pd": 1.58,"Ag": 1.87, "Cd": 1.521,
-    "In": 1.656, "Sn": 1.824,"Sb": 1.984, "Te": 2.158,
-    "I": 2.359, "Xe": 2.582,"Cs": 0.659, "Ba": 0.881,
-    "Lu": 1.09, "Hf": 1.16,"Ta": 1.34, "W": 1.47,
-    "Re": 1.60, "Os": 1.65,"Ir": 1.68, "Pt": 1.72,
-    "Au": 1.92, "Hg": 1.765,"Tl": 1.789, "Pb": 1.854,
-    "Bi": 2.01, "Po": 2.19,"At": 2.39, "Rn": 2.60,
+    "H": 2.300, "He": 4.160, "Li": 0.912, "Be": 1.576,
+    "B": 2.051, "C": 2.544, "N": 3.066, "O": 3.610,
+    "F": 4.193, "Ne": 4.787, "Na": 0.869, "Mg": 1.293,
+    "Al": 1.613, "Si": 1.916, "P": 2.253, "S": 2.589,
+    "Cl": 2.869, "Ar": 3.242, "K": 0.734, "Ca": 1.034,
+    "Sc": 1.19, "Ti": 1.38, "V": 1.53, "Cr": 1.65,
+    "Mn": 1.75, "Fe": 1.80, "Co": 1.84, "Ni": 1.88,
+    "Cu": 1.85, "Zn": 1.588, "Ga": 1.756, "Ge": 1.994,
+    "As": 2.211, "Se": 2.424, "Br": 2.685, "Kr": 2.966,
+    "Rb": 0.706, "Sr": 0.963, "Y": 1.12, "Zr": 1.32,
+    "Nb": 1.41, "Mo": 1.47, "Tc": 1.51, "Ru": 1.54,
+    "Rh": 1.56, "Pd": 1.58, "Ag": 1.87, "Cd": 1.521,
+    "In": 1.656, "Sn": 1.824, "Sb": 1.984, "Te": 2.158,
+    "I": 2.359, "Xe": 2.582, "Cs": 0.659, "Ba": 0.881,
+    "Lu": 1.09, "Hf": 1.16, "Ta": 1.34, "W": 1.47,
+    "Re": 1.60, "Os": 1.65, "Ir": 1.68, "Pt": 1.72,
+    "Au": 1.92, "Hg": 1.765, "Tl": 1.789, "Pb": 1.854,
+    "Bi": 2.01, "Po": 2.19, "At": 2.39, "Rn": 2.60,
     "Fr": 0.67, "Ra": 0.89
 }
+
 
 def get_covalent_radius(atom):
     atomic_num = atom.GetAtomicNum()
@@ -40,6 +42,7 @@ def get_covalent_radius(atom):
         return periodic_table.GetRcovalent(atomic_num)
     except Exception:
         return 0.80
+
 
 def envien(atom: Chem.Atom, rdmol: Union[Chem.Mol, Chem.RWMol]) -> float:
     bs = []
@@ -70,19 +73,20 @@ def getneimasssum(atom: Chem.Atom) -> float:
         s += nei.GetMass()
     return s
 
+
 def g_from_networkx(g):
     edge_index = []
     bo = []
     bidx = []
     for i, j, d in g.edges(data=True):
-        edge_index.extend([(i, j), (j, i)]) 
-        
+        edge_index.extend([(i, j), (j, i)])
+
         bo_val = d['bo']
         bidx_val = d['bidx']
-        
+
         bo.extend([bo_val, bo_val])
         bidx.extend([bidx_val, bidx_val])
-        
+
     x_f = []
     orig_idx = []
     for n, d in sorted(g.nodes(data=True)):
@@ -98,95 +102,99 @@ def g_from_networkx(g):
         num_nodes=num_nodes
     )
 
+
 def g_from_networkx(g):
     edge_index = []
     bo = []
     bidx = []
-    for i,j in tqdm.tqdm(g.edges,total=g.number_of_edges(),desc='g from nx 1',disable=True):
-        edge_index.append((i,j))
-        bo.append(g.edges[i,j]['bo'])
-        bidx.append(g.edges[i,j]['bidx'])
-        edge_index.append((j,i))
-        bo.append(g.edges[i,j]['bo'])
-        bidx.append(g.edges[i,j]['bidx'])
+    for i, j in tqdm.tqdm(g.edges, total=g.number_of_edges(), desc='g from nx 1', disable=True):
+        edge_index.append((i, j))
+        bo.append(g.edges[i, j]['bo'])
+        bidx.append(g.edges[i, j]['bidx'])
+        edge_index.append((j, i))
+        bo.append(g.edges[i, j]['bo'])
+        bidx.append(g.edges[i, j]['bidx'])
     x_f = []
     x_f_q = []
     orig_idx = []
-    for n in tqdm.tqdm(sorted(list(g.nodes)),total=g.number_of_nodes(), desc='g from nx 2',disable=True):
+    for n in tqdm.tqdm(sorted(list(g.nodes)), total=g.number_of_nodes(), desc='g from nx 2', disable=True):
         x_f.append(g.nodes[n]['x_f'])
         x_f_q.append(g.nodes[n]['x_f_q'])
         orig_idx.append(g.nodes[n]['orig_idx'])
-    num_nodes=len(g.nodes)
+    num_nodes = len(g.nodes)
     edge_index = torch.tensor(np.array(edge_index).T)
     x_f = torch.tensor(np.array(x_f))
     x_f_q = torch.tensor(np.array(x_f_q))
     orig_idx = torch.tensor(np.array(orig_idx))
     bo = torch.tensor(np.array(bo))
     bidx = torch.tensor(np.array(bidx))
-    return Data(edge_index=edge_index,x_f=x_f,x_f_q=x_f_q,orig_idx=orig_idx,bo=bo,bidx=bidx,num_nodes=num_nodes)
+    return Data(edge_index=edge_index, x_f=x_f, x_f_q=x_f_q, orig_idx=orig_idx, bo=bo, bidx=bidx, num_nodes=num_nodes)
+
 
 def bg_from_networkx(g):
     edge_index = []
     ao = []
     aidx = []
     idx = []
-    for i,j in tqdm.tqdm(g.edges,total=g.number_of_edges(),desc='bg from nx 1',disable=True):
-        edge_index.append((i,j))
-        ao.append(g.edges[i,j]['ao'])
-        aidx.append(g.edges[i,j]['aidx'])
-        idx.append(g.edges[i,j]['idx'])
-        edge_index.append((j,i))
-        ao.append(g.edges[i,j]['ao'])
-        aidx.append(g.edges[i,j]['aidx'])
-        idx.append(g.edges[i,j]['idx'])
+    for i, j in tqdm.tqdm(g.edges, total=g.number_of_edges(), desc='bg from nx 1', disable=True):
+        edge_index.append((i, j))
+        ao.append(g.edges[i, j]['ao'])
+        aidx.append(g.edges[i, j]['aidx'])
+        idx.append(g.edges[i, j]['idx'])
+        edge_index.append((j, i))
+        ao.append(g.edges[i, j]['ao'])
+        aidx.append(g.edges[i, j]['aidx'])
+        idx.append(g.edges[i, j]['idx'])
     b_f = []
     bead_idx = []
-    for n in tqdm.tqdm(sorted(list(g.nodes)),total=g.number_of_nodes(), desc='bg from nx 2',disable=True):
+    for n in tqdm.tqdm(sorted(list(g.nodes)), total=g.number_of_nodes(), desc='bg from nx 2', disable=True):
         b_f.append(g.nodes[n]['b_f'])
         bead_idx.append(g.nodes[n]['bead_idx'])
-    num_nodes=len(g.nodes)
+    num_nodes = len(g.nodes)
     edge_index = torch.tensor(np.array(edge_index).T)
     b_f = torch.tensor(np.array(b_f))
     bead_idx = torch.tensor(np.array(bead_idx))
     ao = torch.tensor(np.array(ao))
     aidx = torch.tensor(np.array(aidx))
     idx = torch.tensor(np.array(idx))
-    return Data(edge_index=edge_index,b_f=b_f,bead_idx=bead_idx,ao=ao,aidx=aidx,idx=idx,num_nodes=num_nodes)
+    return Data(edge_index=edge_index, b_f=b_f, bead_idx=bead_idx, ao=ao, aidx=aidx, idx=idx, num_nodes=num_nodes)
+
 
 def ag_from_networkx(g):
     edge_index = []
     do = []
     didx = []
     idx = []
-    for i,j in tqdm.tqdm(g.edges,total=g.number_of_edges(),desc='ag from nx 1',disable=True):
-        edge_index.append((i,j))
-        do.append(g.edges[i,j]['do'])
-        didx.append(g.edges[i,j]['didx'])
-        idx.append(g.edges[i,j]['idx'])
+    for i, j in tqdm.tqdm(g.edges, total=g.number_of_edges(), desc='ag from nx 1', disable=True):
+        edge_index.append((i, j))
+        do.append(g.edges[i, j]['do'])
+        didx.append(g.edges[i, j]['didx'])
+        idx.append(g.edges[i, j]['idx'])
 
-        edge_index.append((j,i))
-        do.append(g.edges[i,j]['do'])
-        didx.append(g.edges[i,j]['didx'])
-        idx.append(g.edges[i,j]['idx'])
+        edge_index.append((j, i))
+        do.append(g.edges[i, j]['do'])
+        didx.append(g.edges[i, j]['didx'])
+        idx.append(g.edges[i, j]['idx'])
     a_f = []
     bead_idx = []
-    for n in tqdm.tqdm(sorted(list(g.nodes)),total=g.number_of_nodes(), desc='ag from nx 2',disable=True):
+    for n in tqdm.tqdm(sorted(list(g.nodes)), total=g.number_of_nodes(), desc='ag from nx 2', disable=True):
         a_f.append(g.nodes[n]['a_f'])
         bead_idx.append(g.nodes[n]['bead_idx'])
-    num_nodes=len(g.nodes)
+    num_nodes = len(g.nodes)
     edge_index = torch.from_numpy(np.array(edge_index).T)
-    #print('torch tensor edge index done')
+    # print('torch tensor edge index done')
     a_f = torch.from_numpy(np.array(a_f))
-    #print('torch tensor a_f done')
+    # print('torch tensor a_f done')
     bead_idx = torch.from_numpy(np.array(bead_idx))
-    #print('torch tensor bead idx done')
+    # print('torch tensor bead idx done')
     do = torch.from_numpy(np.array(do))
-    #print('torch tensor do done')
+    # print('torch tensor do done')
     didx = torch.from_numpy(np.array(didx))
-    #print('torch tensor didx done')
+    # print('torch tensor didx done')
     idx = torch.from_numpy(np.array(idx))
-    #print('torch tensor idx done')
-    return Data(edge_index=edge_index,a_f=a_f,bead_idx=bead_idx,do=do,didx=didx,idx=idx,num_nodes=num_nodes)
+    # print('torch tensor idx done')
+    return Data(edge_index=edge_index, a_f=a_f, bead_idx=bead_idx, do=do, didx=didx, idx=idx, num_nodes=num_nodes)
+
 
 def _get_atom_features(idx: int, mol: Chem.Mol) -> np.ndarray:
     r"""
@@ -217,6 +225,7 @@ def _get_atom_features(idx: int, mol: Chem.Mol) -> np.ndarray:
         eni * 5,
         neni * 5
     ], dtype=float)
+
 
 def _get_atom_features_argumented(idx: int, mol: Chem.Mol) -> np.ndarray:
     r"""
@@ -249,20 +258,22 @@ def _get_atom_features_argumented(idx: int, mol: Chem.Mol) -> np.ndarray:
         get_covalent_radius(atom) * 10
     ], dtype=float)
 
-def _get_bond_features(i:int, j:int, mol: Chem.Mol) -> tuple:
+
+def _get_bond_features(i: int, j: int, mol: Chem.Mol) -> tuple:
     r"""
     Extracts chemical bond features and UFF (Universal Force Field) parameters.
 
     Returns a numpy array representing the bond order and its equilibrium
     bond length predicted by UFF.
     """
-    #i, j = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
-    bond = mol.GetBondBetweenAtoms(i,j)
+    # i, j = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+    bond = mol.GetBondBetweenAtoms(i, j)
     cc = GetUFFBondStretchParams(mol, i, j)
     k, bl = cc if cc is not None else (10000.0, 0.25)
 
     bo_feat = np.array([bond.GetBondTypeAsDouble(), bl], dtype=float)
     return bo_feat
+
 
 def _build_atom_graph(mol: Chem.Mol) -> nx.Graph:
     r"""
@@ -285,6 +296,7 @@ def _build_atom_graph(mol: Chem.Mol) -> nx.Graph:
         g.add_edge(i, j, bo=bo_feat, bidx=bidx)
     return g
 
+
 def _build_line_graphs(g: nx.Graph, mol: Chem.Mol) -> tuple[nx.Graph, nx.Graph]:
     r"""
     Constructs the Bond Graph and Angle Graph via line graph transformation.
@@ -297,32 +309,32 @@ def _build_line_graphs(g: nx.Graph, mol: Chem.Mol) -> tuple[nx.Graph, nx.Graph]:
     """
     bond_g = nx.Graph()
     ang_g = nx.Graph()
-    
+
     ang_set = set()
     aidx = 0
-    
+
     # --- 1. Build Bond Graph (Nodes = Bonds, Edges = Angles) ---
     for i, j, edge_data in g.edges(data=True):
         bidx = edge_data['bidx']
         xf_i, xf_j = g.nodes[i]['x_f'], g.nodes[j]['x_f']
-        
+
         # Initialize bond node
         if not bond_g.has_node(bidx):
             bond_g.add_node(bidx, b_f=np.concatenate((xf_i, xf_j)), bead_idx=(i, j))
-            
+
         # Search for adjacent bonds to form angles
         for n in g.neighbors(i):
             if n == j: continue
             nidx = g.edges[i, n]['bidx']
             xf_n = g.nodes[n]['x_f']
-            
+
             if not bond_g.has_node(nidx):
                 bond_g.add_node(nidx, b_f=np.concatenate((xf_i, xf_n)), bead_idx=(i, n))
-                
+
             # Extract UFF angle parameters
             cc = GetUFFAngleBendParams(mol, n, i, j)
             k0, an = cc if cc is not None else (1.5, 109.5)
-            
+
             # Add angle edge (avoiding duplicates)
             if (n, i, j) not in ang_set and (j, i, n) not in ang_set:
                 ang_set.add((n, i, j))
@@ -353,27 +365,29 @@ def _build_line_graphs(g: nx.Graph, mol: Chem.Mol) -> tuple[nx.Graph, nx.Graph]:
     # --- 2. Build Angle Graph (Nodes = Angles, Edges = Dihedrals) ---
     # Hash map for fast O(1) angle index lookup
     beadidx_to_aidx = {data['bead_idx']: node for node, data in ang_g.nodes(data=True)}
-    beadidx_to_aidx.update({(k, j, i): node for node, (i, j, k) in [ (n, d['bead_idx']) for n, d in ang_g.nodes(data=True)]})
-    
+    beadidx_to_aidx.update(
+        {(k, j, i): node for node, (i, j, k) in [(n, d['bead_idx']) for n, d in ang_g.nodes(data=True)]})
+
     didx = 0
     for i, j in g.edges():
         for ni in g.neighbors(i):
             if ni == j: continue
             for nj in g.neighbors(j):
                 if nj == i: continue
-                
+
                 # Fetch indices of the two adjacent angles forming the dihedral
                 nij_idx = beadidx_to_aidx[(ni, i, j)]
                 nji_idx = beadidx_to_aidx[(nj, j, i)]
-                
+
                 # Extract UFF dihedral parameters
                 k0 = GetUFFTorsionParams(mol, ni, i, j, nj)
                 k0 = k0 if k0 is not None else 1.5
-                
+
                 ang_g.add_edge(nij_idx, nji_idx, do=round(k0, 3), didx=didx, idx=(ni, i, j, nj))
                 didx += 1
-                
+
     return bond_g, ang_g
+
 
 def mol2torch_graph(molecule: Union[Chem.Mol, Chem.RWMol], debug: bool = False) -> tuple[Data, Data, Data]:
     r"""
@@ -403,6 +417,7 @@ def mol2torch_graph(molecule: Union[Chem.Mol, Chem.RWMol], debug: bool = False) 
     # 4. Export to PyG Tensor format
     return g_from_networkx(g), bg_from_networkx(bond_g), ag_from_networkx(ang_g)
 
+
 def _sanity_check(g: nx.Graph, ang_g: nx.Graph, molecule: Chem.Mol):
     r"""
     Strict sanity check to ensure no bond angles or dihedral angles
@@ -418,7 +433,7 @@ def _sanity_check(g: nx.Graph, ang_g: nx.Graph, molecule: Chem.Mol):
         idx_di.add((ni, i, j, nj))
         idx_di.add((nj, j, i, ni))
 
-    for b in tqdm.tqdm(molecule.GetBonds(),total=molecule.GetNumBonds(),desc='check bond',disable=True):
+    for b in tqdm.tqdm(molecule.GetBonds(), total=molecule.GetNumBonds(), desc='check bond', disable=True):
         i, j = b.GetBeginAtomIdx(), b.GetEndAtomIdx()
         # for ni in g.neighbors(i):
         for nbri in molecule.GetAtomWithIdx(i).GetNeighbors():
@@ -455,7 +470,3 @@ def _sanity_check(g: nx.Graph, ang_g: nx.Graph, molecule: Chem.Mol):
 
     if error_flag:
         raise Exception('ml graph creation error')
-
-
-
-

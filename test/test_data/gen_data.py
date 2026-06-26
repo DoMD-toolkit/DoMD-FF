@@ -1,4 +1,3 @@
-import os
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -20,7 +19,6 @@ def generate_perfect_separated_test_systems(pdb_out="test_system.pdb", sdf_out="
     AllChem.EmbedMolecule(mol3, AllChem.ETKDGv3())
     AllChem.MMFFOptimizeMolecule(mol3)
 
-
     conf2 = mol2.GetConformer()
     for i in range(mol2.GetNumAtoms()):
         pos = conf2.GetAtomPosition(i)
@@ -31,10 +29,8 @@ def generate_perfect_separated_test_systems(pdb_out="test_system.pdb", sdf_out="
         pos = conf3.GetAtomPosition(i)
         conf3.SetAtomPosition(i, (pos.x + 30.0, pos.y, pos.z))
 
-
     combined_mol = Chem.CombineMols(mol1, mol2)
     combined_mol = Chem.CombineMols(combined_mol, mol3)
-
 
     benzene_query = Chem.MolFromSmarts("c1ccccc1")
     ring_matches = combined_mol.GetSubstructMatches(benzene_query)
@@ -48,13 +44,11 @@ def generate_perfect_separated_test_systems(pdb_out="test_system.pdb", sdf_out="
                 atom_res_map[idx] = ("PH", res_id_counter)
         res_id_counter += 1
 
-
     for atom in combined_mol.GetAtoms():
         idx = atom.GetIdx()
         if atom.GetAtomicNum() > 1 and idx not in atom_res_map:
             atom_res_map[idx] = ("CC", res_id_counter)
     res_id_counter += 1
-
 
     for atom in combined_mol.GetAtoms():
         idx = atom.GetIdx()
@@ -134,7 +128,6 @@ def generate_perfect_separated_test_systems(pdb_out="test_system.pdb", sdf_out="
 
     writer.write(combined_mol)
     writer.close()
-
 
 
 if __name__ == "__main__":

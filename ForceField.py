@@ -34,7 +34,8 @@ class FF(object):
                 logger.info(f"OPLS total charge for {rdmol}: {charge_drift:.4f}")
                 charge_drift /= atom_count
                 for idx in self.params[0]:
-                    self.charges[idx] = (self.params[0][idx].charge - charge_drift + formal_charge / atom_count) * charge_factor
+                    self.charges[idx] = (self.params[0][
+                                             idx].charge - charge_drift + formal_charge / atom_count) * charge_factor
                 logger.info(f"OPLS reset total charge to formal charge {formal_charge * charge_factor:.4f}.")
 
     # TODO: add MD modules

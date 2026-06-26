@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>MD AutoFF Pipeline v1.0</title>
+    <title>MD AutoFF Pipeline v1.6</title>
     <style>
         body {
             background-color: #c0c0c0; color: #000000; font-family: "Times New Roman", Times, serif;
@@ -22,11 +22,15 @@
         #terminal-window { flex-grow: 1; display: flex; flex-direction: column; min-height: 0; margin-bottom: 5px; }
         #terminal-container {
             border: 2px inset #fff; background-color: #000000; margin-top: 10px;
-            flex-grow: 1; display: flex; flex-direction: column; min-height: 0;
+            flex-grow: 1;
+            position: relative; /* 核心防撑爆 1：将父容器设为定位锚点 */
         }
         #terminal {
             color: #00ff00; font-family: "Courier New", monospace; font-size: 14px; padding: 10px;
-            flex-grow: 1; overflow-y: scroll; margin: 0; white-space: pre-wrap;
+            /* 核心防撑爆 2：绝对定位，死死钉在父容器的四个角 */
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            box-sizing: border-box; /* 核心防撑爆 3：保证 padding 不会额外撑大体积 */
+            overflow-y: scroll; margin: 0; white-space: pre-wrap;
         }
 
         #dropzone {
@@ -40,7 +44,7 @@
         #fileInput { display: none; }
 
         .form-group { margin-bottom: 5px; font-family: Arial, sans-serif; font-size: 14px; }
-        .file-status { color: #800000; font-family: "Courier New", Courier, monospace; font-weight: bold; background: #e0e0e0; padding: 5px; border: 1px inset #fff; margin-bottom: 10px;}
+        .file-status { color: #800000; font-family: "Courier New", Courier, monospace; font-weight: bold; background: #e0e0e0; padding: 5px; border: 2px inset #fff; margin-bottom: 10px;}
 
         button {
             background-color: #c0c0c0;
@@ -50,6 +54,13 @@
         }
         button:active { border-top: 2px solid #404040; border-left: 2px solid #404040; border-right: 2px solid #ffffff; border-bottom: 2px solid #ffffff; }
         button:disabled { color: #808080; cursor: not-allowed; }
+
+        /* 复古的小输入框样式 */
+        .retro-input {
+            background-color: #ffffff; border: 2px inset #ffffff;
+            font-family: "Courier New", monospace; font-size: 14px;
+            padding: 2px 5px; width: 50px; text-align: right;
+        }
 
         #result-area {
             border-top: 2px solid #404040; border-left: 2px solid #404040;
@@ -91,242 +102,251 @@
 </head>
 <body>
 
-    <div class="main-wrapper">
-        <div class="top-bar">
-            <span>MD AutoFF Pipeline Interface [v1.0]</span>
-            <span>SYS_READY</span>
-        </div>
-
-        <div class="window">
-            <h2>Input Parameters</h2>
-            <div id="dropzone">Click to Browse or Drag & Drop (.pdb, .sdf)</div>
-            <input type="file" id="fileInput" accept=".pdb,.sdf" multiple>
-
-            <div class="form-group file-status">
-                <div>Mol File: <span id="molDisplay" style="color:blue;">[None]</span></div>
-            </div>
-
-            <hr style="border: 0; border-top: 1px solid #808080; border-bottom: 1px solid #ffffff; margin: 8px 0;">
-
-            <div class="form-group" style="display: flex; gap: 15px; flex-wrap: wrap;">
-                <span><input type="checkbox" id="useGMX" checked> <label for="useGMX">GROMACS</label></span>
-                <span><input type="checkbox" id="useBOSS" checked> <label for="useBOSS">BOSS</label></span>
-                <span><input type="checkbox" id="useML"> <label for="useML">ML Inference</label></span>
-                <span><input type="checkbox" id="overwrite"> <label for="overwrite">Overwrite existing</label></span>
-            </div>
-
-            <div class="form-group" style="display: flex; gap: 15px; margin-top: 8px; align-items: center;">
-                <span style="font-weight: bold; color: #000080; border-right: 1px solid #808080; padding-right: 10px;">Output Mode</span>
-                <span><input type="radio" name="runMode" id="modeTop" value="top_mode" checked> <label for="modeTop">TOP Mode</label></span>
-                <span><input type="radio" name="runMode" id="modeItp" value="itp_mode"> <label for="modeItp">ITP Mode</label></span>
-            </div>
-
-            <button id="submitBtn" style="margin-top: 8px;">EXECUTE_PIPELINE()</button>
-
-            <div id="result-area">
-                <div class="result-row" id="resultMsg">[SYSTEM STANDBY] Output slot empty.</div>
-                <div class="result-row">
-                    <a href="#" id="downloadLink" target="_blank">>> Download Results Archive (.zip) <<</a>
-                </div>
-            </div>
-        </div>
-
-        <div class="window" id="terminal-window">
-            <h3>Console Output</h3>
-            <div id="terminal-container"><pre id="terminal">Welcome!</pre></div>
-        </div>
-
-        <div class="footer">
-            Copyright &copy; 2000-2026 DoMD-toolkit Team. All Rights Reserved.<br>
-        </div>
+<div class="main-wrapper">
+    <div class="top-bar">
+        <span>MD AutoFF Pipeline Interface [v1.6 FINAL]</span>
+        <span>SYS_READY</span>
     </div>
 
-    <div id="modalOverlay">
-        <div class="retro-modal">
-            <div class="modal-title">
-                <span id="modalTitleText">System Alert</span>
-                <button onclick="closeModal()" style="padding: 0 5px; font-size: 10px; margin-left: 10px;">X</button>
-            </div>
-            <div class="modal-body">
-                <p id="modalMsg" style="margin-top:0; font-weight: bold;"></p>
-                <button onclick="closeModal()">Acknowledge (OK)</button>
+    <div class="window">
+        <h2>Input Parameters</h2>
+        <div id="dropzone">Click to Browse or Drag & Drop (.pdb, .sdf)</div>
+        <input accept=".pdb,.sdf" id="fileInput" multiple type="file">
+
+        <div class="form-group file-status">
+            <div>Mol File: <span id="molDisplay" style="color:blue;">[None]</span></div>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid #808080; border-bottom: 1px solid #ffffff; margin: 8px 0;">
+
+        <div class="form-group" style="display: flex; gap: 15px; flex-wrap: wrap;">
+            <span><input checked id="useGMX" type="checkbox"> <label for="useGMX">GROMACS</label></span>
+            <span><input checked id="useBOSS" type="checkbox"> <label for="useBOSS">BOSS</label></span>
+            <span><input id="useML" type="checkbox"> <label for="useML">ML Inference</label></span>
+            <span><input id="overwrite" type="checkbox"> <label for="overwrite">Overwrite existing</label></span>
+        </div>
+
+        <div class="form-group"
+             style="display: flex; gap: 15px; margin-top: 10px; align-items: center; flex-wrap: wrap;">
+            <span style="font-weight: bold; color: #000080; border-right: 1px solid #808080; padding-right: 10px;">Run Mode</span>
+
+            <span><input checked id="modeTop" name="run_mode" type="radio" value="top_mode"> <label for="modeTop">TOP Mode</label></span>
+            <span><input id="modeItp" name="run_mode" type="radio" value="itp_mode"> <label
+                    for="modeItp">ITP Mode</label></span>
+
+            <span style="border-left: 1px solid #ffffff; padding-left: 15px; margin-left: 5px; display: flex; align-items: center; gap: 5px;">
+                    <label for="chargeFactor" style="font-weight: bold; color: #000080;">Charge Factor:</label>
+                    <input class="retro-input" id="chargeFactor" step="0.1" type="number" value="1.0">
+                </span>
+        </div>
+
+        <button id="submitBtn" style="margin-top: 10px;">EXECUTE_PIPELINE()</button>
+
+        <div id="result-area">
+            <div class="result-row" id="resultMsg">[SYSTEM STANDBY] Output slot empty.</div>
+            <div class="result-row">
+                <a href="#" id="downloadLink" target="_blank">>> Download Results Archive (.zip) <<</a>
             </div>
         </div>
     </div>
 
-    <script>
-        const fileInput = document.getElementById('fileInput');
-        const dropzone = document.getElementById('dropzone');
-        const molDisplay = document.getElementById('molDisplay');
-        const terminal = document.getElementById('terminal');
-        const resultArea = document.getElementById('result-area');
-        const resultMsg = document.getElementById('resultMsg');
-        const downloadLink = document.getElementById('downloadLink');
+    <div class="window" id="terminal-window">
+        <h3>Console Output</h3>
+        <div id="terminal-container">
+            <pre id="terminal">Welcome to MD AutoFF System.</pre>
+        </div>
+    </div>
 
-        let stateFiles = { mol: null, idx: null };
+    <div class="footer">
+        Copyright &copy; 2000-2026 DoMD-toolkit Team. All Rights Reserved.<br>
+    </div>
+</div>
 
-        function showModal(msg, isError = true) {
-            document.getElementById('modalTitleText').textContent = isError ? "CRITICAL_ERROR" : "SYS_INFO";
-            document.querySelector('.modal-title').style.backgroundColor = isError ? "#800000" : "#000080";
-            document.getElementById('modalMsg').textContent = msg;
-            document.getElementById('modalOverlay').style.display = "flex";
-        }
-        function closeModal() { document.getElementById('modalOverlay').style.display = "none"; }
+<div id="modalOverlay">
+    <div class="retro-modal">
+        <div class="modal-title">
+            <span id="modalTitleText">System Alert</span>
+            <button onclick="closeModal()" style="padding: 0 5px; font-size: 10px; margin-left: 10px;">X</button>
+        </div>
+        <div class="modal-body">
+            <p id="modalMsg" style="margin-top:0; font-weight: bold;"></p>
+            <button onclick="closeModal()">Acknowledge (OK)</button>
+        </div>
+    </div>
+</div>
 
-        function logToTerminal(msg) {
-            const time = new Date().toTimeString().split(' ')[0];
-            terminal.appendChild(document.createTextNode(`\n[${time}] ${msg}`));
-            terminal.scrollTop = terminal.scrollHeight;
-        }
+<script>
+    const fileInput = document.getElementById('fileInput');
+    const dropzone = document.getElementById('dropzone');
+    const molDisplay = document.getElementById('molDisplay');
+    const terminal = document.getElementById('terminal');
+    const resultArea = document.getElementById('result-area');
+    const resultMsg = document.getElementById('resultMsg');
+    const downloadLink = document.getElementById('downloadLink');
 
-        function processFiles(fileList) {
-            Array.from(fileList).forEach(file => {
-                const name = file.name.toLowerCase();
-                if (name.endsWith('.pdb') || name.endsWith('.sdf')) {
-                    stateFiles.mol = file;
-                    molDisplay.textContent = file.name;
-                    logToTerminal(`* Memory loaded: ${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`);
-                } else if (name.endsWith('.idx')) {
-                    stateFiles.idx = file;
-                    // 如果未来还需要显示 idx 状态，可以在这里加回去
-                    logToTerminal(`* Memory loaded: ${file.name}`);
-                } else {
-                    logToTerminal(`! Ignored unknown file type: ${file.name}`);
-                }
-            });
-        }
+    let stateFiles = { mol: null };
 
-        dropzone.addEventListener('click', () => fileInput.click());
-        dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
-        dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
-        dropzone.addEventListener('drop', (e) => {
-            e.preventDefault(); dropzone.classList.remove('dragover');
-            processFiles(e.dataTransfer.files);
-        });
-        fileInput.addEventListener('change', (e) => processFiles(e.target.files));
+    function showModal(msg, isError = true) {
+        document.getElementById('modalTitleText').textContent = isError ? "CRITICAL_ERROR" : "SYS_INFO";
+        document.querySelector('.modal-title').style.backgroundColor = isError ? "#800000" : "#000080";
+        document.getElementById('modalMsg').textContent = msg;
+        document.getElementById('modalOverlay').style.display = "flex";
+    }
+    function closeModal() { document.getElementById('modalOverlay').style.display = "none"; }
 
-        function uploadWithProgress(formData) {
-            return new Promise((resolve, reject) => {
-                const xhr = new XMLHttpRequest();
-                xhr.open('POST', '/api/upload_and_run');
+    function logToTerminal(msg) {
+        const time = new Date().toTimeString().split(' ')[0];
+        terminal.appendChild(document.createTextNode(`\n[${time}] ${msg}`));
+        terminal.scrollTop = terminal.scrollHeight;
+    }
 
-                const time = new Date().toTimeString().split(' ')[0];
-                terminal.appendChild(document.createTextNode(`\n[${time}] DATA_TRANSFER: `));
-
-                const progressSpan = document.createElement('span');
-                progressSpan.style.color = '#33ccff';
-                progressSpan.textContent = `[····················] 0%`;
-                terminal.appendChild(progressSpan);
-                terminal.scrollTop = terminal.scrollHeight;
-
-                xhr.upload.onprogress = (e) => {
-                    if (e.lengthComputable) {
-                        const percent = Math.round((e.loaded / e.total) * 100);
-                        const filled = Math.floor(percent / 5);
-                        const bar = '█'.repeat(filled) + '·'.repeat(20 - filled);
-                        progressSpan.textContent = `[${bar}] ${percent}%`;
-                    }
-                };
-
-                xhr.onload = () => {
-                    if (xhr.status >= 200 && xhr.status < 300) {
-                        progressSpan.textContent = `[████████████████████] 100% (OK)`;
-                        progressSpan.style.color = '#00ff00';
-                        try {
-                            resolve(JSON.parse(xhr.responseText));
-                        } catch(err) { reject("JSON Parse Error"); }
-                    } else {
-                        progressSpan.textContent = `[SERVER_REJECTED]`;
-                        progressSpan.style.color = '#ff0000';
-                        reject(`HTTP ${xhr.status}`);
-                    }
-                };
-
-                xhr.onerror = () => {
-                    progressSpan.textContent = `[NETWORK_LINK_DEAD]`;
-                    progressSpan.style.color = '#ff0000';
-                    reject("Connection to VPS lost");
-                };
-
-                xhr.send(formData);
-            });
-        }
-
-        document.getElementById('submitBtn').addEventListener('click', async () => {
-            if (!stateFiles.mol) {
-                showModal("Missing Input: You must provide at least one .PDB or .SDF file to proceed.", true);
-                return;
+    function processFiles(fileList) {
+        Array.from(fileList).forEach(file => {
+            const name = file.name.toLowerCase();
+            if (name.endsWith('.pdb') || name.endsWith('.sdf')) {
+                stateFiles.mol = file;
+                molDisplay.textContent = file.name;
+                logToTerminal(`* Memory loaded: ${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`);
+            } else {
+                logToTerminal(`! Ignored unknown file type: ${file.name}`);
             }
+        });
+    }
 
-            document.getElementById('submitBtn').disabled = true;
-            resultArea.className = "";
-            downloadLink.classList.remove('active');
-            resultMsg.textContent = "[PROCESSING] Uploading payload to remote cluster...";
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', (e) => {
+        e.preventDefault(); dropzone.classList.remove('dragover');
+        processFiles(e.dataTransfer.files);
+    });
+    fileInput.addEventListener('change', (e) => processFiles(e.target.files));
 
-            logToTerminal("=========================================");
-            logToTerminal(">>> INITIATING P2P UPLOAD SEQUENCE...");
+    function uploadWithProgress(formData) {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/api/upload_and_run');
 
-            const formData = new FormData();
-            formData.append('files', stateFiles.mol);
-            if (stateFiles.idx) formData.append('files', stateFiles.idx);
+            const time = new Date().toTimeString().split(' ')[0];
+            terminal.appendChild(document.createTextNode(`\n[${time}] DATA_TRANSFER: `));
 
-            // ================= 核心更新：将新增的两个参数打包进 JSON =================
-            formData.append('params_json', JSON.stringify({
-                useGMX: document.getElementById('useGMX').checked,
-                useBOSS: document.getElementById('useBOSS').checked,
-                useML: document.getElementById('useML').checked,
-                overwrite: document.getElementById('overwrite').checked,
-                mode: document.querySelector('input[name="runMode"]:checked').value
-            }));
+            const progressSpan = document.createElement('span');
+            progressSpan.style.color = '#33ccff';
+            progressSpan.textContent = `[····················] 0%`;
+            terminal.appendChild(progressSpan);
+            terminal.scrollTop = terminal.scrollHeight;
 
-            try {
-                const data = await uploadWithProgress(formData);
-                if (data.status !== 'success') throw new Error(data.error);
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) {
+                    const percent = Math.round((e.loaded / e.total) * 100);
+                    const filled = Math.floor(percent / 5);
+                    const bar = '█'.repeat(filled) + '·'.repeat(20 - filled);
+                    progressSpan.textContent = `[${bar}] ${percent}%`;
+                }
+            };
 
-                resultMsg.textContent = "[PROCESSING] Data received. Awaiting computation logs...";
-                logToTerminal(">>> WAITING FOR COMPUTE NODE...");
+            xhr.onload = () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    progressSpan.textContent = `[████████████████████] 100% (OK)`;
+                    progressSpan.style.color = '#00ff00';
+                    try {
+                        resolve(JSON.parse(xhr.responseText));
+                    } catch(err) { reject("JSON Parse Error"); }
+                } else {
+                    progressSpan.textContent = `[SERVER_REJECTED]`;
+                    progressSpan.style.color = '#ff0000';
+                    reject(`HTTP ${xhr.status}`);
+                }
+            };
 
-                const taskId = data.task_id;
-                const evtSource = new EventSource(`/api/stream_logs/${taskId}`);
+            xhr.onerror = () => {
+                progressSpan.textContent = `[NETWORK_LINK_DEAD]`;
+                progressSpan.style.color = '#ff0000';
+                reject("Connection to VPS lost");
+            };
 
-                evtSource.onmessage = function(event) {
-                    if (event.data.startsWith("[[DONE_")) {
-                        evtSource.close();
-                        const isSuccess = event.data === "[[DONE_SUCCESS]]";
+            xhr.send(formData);
+        });
+    }
 
-                        resultArea.className = isSuccess ? "status-success" : "status-error";
+    document.getElementById('submitBtn').addEventListener('click', async () => {
+        if (!stateFiles.mol) {
+            showModal("Missing Input: You must provide at least one .PDB or .SDF file to proceed.", true);
+            return;
+        }
 
-                        if (isSuccess) {
-                            resultMsg.textContent = "COMPUTATION COMPLETE - Results generated successfully.";
-                            logToTerminal(">>> Process finished with exit code 0.");
-                        } else {
-                            resultMsg.textContent = "FATAL ERROR - Computation failed. Download logs for details.";
-                            logToTerminal(">>> Process aborted with error. See debug_error.log.");
-                        }
+        document.getElementById('submitBtn').disabled = true;
+        resultArea.className = "";
+        downloadLink.classList.remove('active');
+        resultMsg.textContent = "[PROCESSING] Uploading payload to remote cluster...";
 
-                        downloadLink.href = `/api/download/${taskId}`;
-                        downloadLink.classList.add('active');
-                        document.getElementById('submitBtn').disabled = false;
-                    } else {
-                        logToTerminal(event.data);
-                    }
-                };
-                evtSource.onerror = () => {
-                    logToTerminal("! SSE Stream Interrupted.");
+        logToTerminal("=========================================");
+        logToTerminal(">>> INITIATING P2P UPLOAD SEQUENCE...");
+
+        const formData = new FormData();
+        formData.append('files', stateFiles.mol);
+
+        // ================= 最终版 JSON Payload 构造 =================
+        // 确保 charge_factor 作为 float 类型传给后端
+        const chargeVal = parseFloat(document.getElementById('chargeFactor').value);
+
+        formData.append('params_json', JSON.stringify({
+            useGMX: document.getElementById('useGMX').checked,
+            useBOSS: document.getElementById('useBOSS').checked,
+            useML: document.getElementById('useML').checked,
+            overwrite: document.getElementById('overwrite').checked,
+            run_mode: document.querySelector('input[name="run_mode"]:checked').value,
+            charge_factor: isNaN(chargeVal) ? 1.0 : chargeVal // 防呆设计，如果输入为空则默认1.0
+        }));
+
+        try {
+            const data = await uploadWithProgress(formData);
+            if (data.status !== 'success') throw new Error(data.error);
+
+            resultMsg.textContent = "[PROCESSING] Data received. Awaiting computation logs...";
+            logToTerminal(">>> WAITING FOR COMPUTE NODE...");
+
+            const taskId = data.task_id;
+            const evtSource = new EventSource(`/api/stream_logs/${taskId}`);
+
+            evtSource.onmessage = function(event) {
+                if (event.data.startsWith("[[DONE_")) {
                     evtSource.close();
-                    document.getElementById('submitBtn').disabled = false;
-                    resultArea.className = "";
-                    resultMsg.textContent = "[SYSTEM ALERT] Connection lost.";
-                };
+                    const isSuccess = event.data === "[[DONE_SUCCESS]]";
 
-            } catch (err) {
-                logToTerminal(`! UPLOAD ABORTED: ${err}`);
-                showModal("Network communication failed during upload.", true);
+                    resultArea.className = isSuccess ? "status-success" : "status-error";
+
+                    if (isSuccess) {
+                        resultMsg.textContent = "COMPUTATION COMPLETE - Results generated successfully.";
+                        logToTerminal(">>> Process finished with exit code 0.");
+                    } else {
+                        resultMsg.textContent = "FATAL ERROR - Computation failed. Download logs for details.";
+                        logToTerminal(">>> Process aborted with error. See debug_error.log.");
+                    }
+
+                    downloadLink.href = `/api/download/${taskId}`;
+                    downloadLink.classList.add('active');
+                    document.getElementById('submitBtn').disabled = false;
+                } else {
+                    logToTerminal(event.data);
+                }
+            };
+            evtSource.onerror = () => {
+                logToTerminal("! SSE Stream Interrupted.");
+                evtSource.close();
                 document.getElementById('submitBtn').disabled = false;
                 resultArea.className = "";
-                resultMsg.textContent = "[SYSTEM ALERT] Network Exception.";
-            }
-        });
-    </script>
+                resultMsg.textContent = "[SYSTEM ALERT] Connection lost.";
+            };
+
+        } catch (err) {
+            logToTerminal(`! UPLOAD ABORTED: ${err}`);
+            showModal("Network communication failed during upload.", true);
+            document.getElementById('submitBtn').disabled = false;
+            resultArea.className = "";
+            resultMsg.textContent = "[SYSTEM ALERT] Network Exception.";
+        }
+    });
+</script>
 </body>
 </html>

@@ -1,12 +1,10 @@
-import sys
-
-from misc.pipeline import run_itp_mode, run_top_mode
-from misc.parser import molecule_reader
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from misc.logger import logger
-logger.setLevel('WARNING')
 
+from misc.logger import logger
+from misc.pipeline import run_itp_mode, run_top_mode
+
+logger.setLevel('WARNING')
 
 rdmol = Chem.MolFromSmiles('O=S(=O)([N-]S(=O)(=O)C(F)(F)F)C(F)(F)F')
 num_atoms = rdmol.GetNumAtoms()

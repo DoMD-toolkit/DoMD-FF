@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -14,9 +15,9 @@ from fastapi.responses import HTMLResponse
 from sse_starlette.sse import EventSourceResponse
 
 from ForceField import FF
-from misc.io.gmx import write_gro_file, write_top_file
-from misc.logger import task_file_log_scope
-from misc.parser import molecule_reader
+from misc.io.gmx import write_gro_file, write_top_file, write_list_itp_files
+from misc.logger import task_file_log_scope, mol_file_log_scope
+from misc.parser import molecule_reader, molecule_reader_list
 
 app = FastAPI(title="P2P FF parameterizer server")
 
@@ -24,6 +25,23 @@ WORKSPACE_BASE = "./workspaces"
 os.makedirs(WORKSPACE_BASE, exist_ok=True)
 
 task_log_queues = {}
+
+
+@contextlib.contextmanager
+def sub_molecule_log_scope(logger_to_hook, log_filepath):
+    """
+    临时为指定的 logger 挂载一个文件 Handler。
+    退出 with 块时自动卸载，绝不污染后续的日志。
+    """
+    file_handler = logging.FileHandler(log_filepath, mode='w', encoding='utf-8')
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - [%(levelname)s] - %(message)s'))
+
+    logger_to_hook.addHandler(file_handler)
+    try:
+        yield log_filepath
+    finally:
+        logger_to_hook.removeHandler(file_handler)
+        file_handler.close()
 
 
 def setup_task_logger(task_id: str, log_queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
@@ -52,21 +70,25 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
     # 记录状态
     compute_status = "SUCCESS"
     zip_path = os.path.join(WORKSPACE_BASE, f"{task_id}_result.zip")
-    output_gro_path = os.path.join(work_dir, "output.gro")
-    output_top_path = os.path.join(work_dir, "output.top")
     web_logger = setup_task_logger(task_id, log_queue, loop)
 
     with task_file_log_scope(task_name=task_id, log_dir=work_dir) as debug_log_path:
+        web_logger.info(f"Starting TASK {task_id}...")
+        web_logger.info(f"Parameters: useGMX: {params.get("useGMX")} useBOSS: {params.get("useBOSS")}"
+                        f" useML: {params.get("useML")} overwrite: {params.get("overwrite")} "
+                        f"charge_factor: {params.get("charge_factor")}")
         try:
-            if params.get("mode") == "top":
-                web_logger.info(f"Molecular File: {file_paths.get('mol_file_path')}")
-
-                obmol, rdmol, coordinates, res_names, res_ids, box_tensor = molecule_reader(file_paths.get('mol_file_path'))
-
+            web_logger.info(f"Molecular File: {file_paths.get('mol_file_path')}")
+            if params.get("run_mode") == "top_mode":
+                output_gro_path = os.path.join(work_dir, "output.gro")
+                output_top_path = os.path.join(work_dir, "output.top")
+                obmol, rdmol, coordinates, res_names, res_ids, box_tensor = molecule_reader(
+                    file_paths.get('mol_file_path'))
                 web_logger.info(f"Staring to set OPLS force field for system {file_paths.get('mol_file_path')}")
                 forcefield = FF('opls')
                 forcefield.setup(rdmol, obmol, useGMX=params.get("useGMX"),
-                                 useBOSS=params.get("useBOSS"), useML=params.get("useML"))
+                                 useBOSS=params.get("useBOSS"), useML=params.get("useML"),
+                                 overwrite=params.get("overwrite"), charge_factor=params.get("charge_factor"))
                 if not forcefield.success:
                     raise ValueError("Force field parametrization failed, please check the log files.")
 
@@ -74,15 +96,52 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
                 web_logger.info("Writing GRO file...")
                 write_gro_file(output_gro_path, coordinates, res_names, res_ids, box_tensor)
                 web_logger.info("Writing TOP file...")
-                params_atom, params_bonded, params_improper = forcefield.params
-                write_top_file(output_top_path, params_atom, params_bonded, params_improper, res_names, res_ids)
+                write_top_file(output_top_path, forcefield, res_names, res_ids)
 
                 with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                     zipf.write(output_gro_path, arcname="output.gro")
                     zipf.write(output_top_path, arcname="output.top")
                     zipf.write(debug_log_path, arcname="debug.log")
-            elif params.get("mode") == "itp":
-                pass
+
+            elif params.get("run_mode") == "itp_mode":
+                atomtypes_path = os.path.join(work_dir, "atomtypes.itp")
+                mol_list = molecule_reader_list(file_paths.get('mol_file_path'))
+                itp_fns = []
+                forcefields = []
+                mol_names = []
+                mol_log_paths = []
+                web_logger.info(f"--- Total number of molecule fragments {len(mol_list)} ---")
+                for idx, mol in enumerate(mol_list):
+                    with mol_file_log_scope(idx, work_dir) as mol_log_path:
+                        mol_log_paths.append(mol_log_path)
+                        web_logger.info(f"--- Starting parametrization for Molecule {idx:03d} ---")
+                        forcefield = FF('opls')
+                        forcefield.setup(mol, obmol=None, useGMX=params.get("useGMX"),
+                                         useBOSS=params.get("useBOSS"), useML=params.get("useML"),
+                                         overwrite=params.get("overwrite"), charge_factor=params.get("charge_factor"))
+                        if not forcefield.success:
+                            web_logger.error(f"Force field for molecule {idx:03d} parametrization "
+                                             f"failed, please check this log file.")
+                        else:
+                            itp_fns.append(os.path.join(work_dir, f"{idx:03d}.itp"))
+                            mol_names.append(f"{idx:03d}")
+                            forcefields.append(forcefield)
+                            web_logger.info(f"Molecule {idx:03d} parametrization success.")
+
+                web_logger.info("Writing ITP files...")
+                write_list_itp_files(itp_fns, forcefields, mol_names)
+                web_logger.info("Packaging ITP results and logs into ZIP archive...")
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    if os.path.exists(debug_log_path):
+                        zipf.write(debug_log_path, arcname="debug_master.log")
+                    for itp_file in itp_fns:
+                        if os.path.exists(itp_file):
+                            zipf.write(itp_file, arcname=os.path.basename(itp_file))
+                    for ml_log in mol_log_paths:
+                        if os.path.exists(ml_log):
+                            zipf.write(ml_log, arcname=os.path.basename(ml_log))
+                    zipf.write(atomtypes_path, arcname=os.path.basename(atomtypes_path))
+                web_logger.info("Zip package created successfully.")
 
         except Exception as e:
             compute_status = "ERROR"
@@ -93,7 +152,7 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
                 zipf.write(debug_log_path, arcname="debug_error.log")
 
     loop.call_soon_threadsafe(log_queue.put_nowait, f"[[DONE_{compute_status}]]")
-    shutil.rmtree(work_dir, ignore_errors=True)
+    # shutil.rmtree(work_dir, ignore_errors=True)
 
 
 @app.get("/", response_class=HTMLResponse)

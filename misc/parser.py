@@ -1,8 +1,8 @@
 import os
+from openbabel import openbabel as ob
 
 import numpy as np
 from rdkit import Chem
-from openbabel import openbabel as ob
 
 from misc.logger import logger
 
@@ -82,8 +82,6 @@ def molecule_reader(input_path):
         box_tensor: 长度为 9 的列表 (埃)
     """
     ext = os.path.splitext(input_path)[-1].lower().replace('.', '')
-
-
     if ext == 'pdb':
         rdmol = Chem.MolFromPDBFile(input_path, removeHs=False)
         obmol = ob.OBMol()
@@ -94,7 +92,6 @@ def molecule_reader(input_path):
         rdmol, obmol, ob_suc = sdf_load_all_as_one(input_path)
     else:
         raise ValueError("Only PDB and SDF files are supported!")
-
 
     if not rdmol or not rdmol.GetNumConformers() or not ob_suc:
         raise ValueError("Read file failed!")
@@ -170,3 +167,32 @@ def molecule_reader(input_path):
         box_tensor = [dx, dy, dz, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
     return obmol, rdmol, coordinates, res_names, res_ids, box_tensor
+
+
+def molecule_reader_list(input_path):
+    """
+    工业级大体系读取器
+    支持 PDB 和 SDF (V3000) 格式。
+    具备残基编号溢出自动还原（Unwrap）机制与全自动默认兜底。
+
+    返回:
+        obmol: Ob mol
+        rdmol: RDKit 分子对象
+        coordinates: Nx3 的 numpy 数组 (单位: 埃)
+        res_names: 长度为 N 的列表 (每个原子的残基名)
+        res_ids: 长度为 N 的列表 (每个原子的真实大残基编号，可达百万)
+        box_tensor: 长度为 9 的列表 (埃)
+    """
+    ext = os.path.splitext(input_path)[-1].lower().replace('.', '')
+    if ext == 'pdb':
+        rdmol = Chem.MolFromPDBFile(input_path, removeHs=False)
+    elif ext == 'sdf':
+        rdmol, obmol, ob_suc = sdf_load_all_as_one(input_path)
+    else:
+        raise ValueError("Only PDB and SDF files are supported!")
+
+    if not rdmol or not rdmol.GetNumConformers():
+        raise ValueError("Read file failed!")
+
+    mol_list = Chem.GetMolFrags(rdmol, asMols=True)
+    return mol_list

@@ -3,8 +3,6 @@ from collections import namedtuple
 GMXRule = namedtuple("GMXRule", ['opls_num', 'bond_type', 'mass', 'sigma',
                                  'epsilon', 'charge', 'smarts', 'desc', 'patt', 'ptype'])
 
-
-
 GMXBond = namedtuple("GMXBond", ["atom_types", "r0", "k", 'ftype'])
 GMXAngle = namedtuple("GMXAngle", ["atom_types", "t0", "k", 'ftype'])
 GMXDihedral = namedtuple("GMXDihedral",

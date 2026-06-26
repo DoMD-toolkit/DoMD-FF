@@ -1,14 +1,14 @@
 import os
-import sys
-import logging
+
 import numpy as np
 from rdkit import Chem
 
 from ForceField import FF
+from misc.io.gmx import write_gro_file, write_top_file, write_itp_file
 from misc.logger import logger
-from misc.io.gmx import write_gro_file, write_top_file, write_itp_file, write_atomtypes_head, \
-    write_top_file_with_includes
-#logger.setLevel('ERROR')
+
+
+# logger.setLevel('ERROR')
 
 def _extract_mol_metadata(mol):
     """Helper function to extract structural properties directly from an RDKit molecule object."""
@@ -109,7 +109,7 @@ def run_itp_mode(mols, output_dir, obmols=None, molecule_name=None):
         mol_name = molecule_name[idx]
         atom_names = [params_atom[i].element for i in range(len(params_atom))]
         write_gro_file(gro_out, coordinates, res_names, res_ids, box_tensor, atom_names)
-        write_itp_file(itp_out, forcefield, res_names, res_ids,mol_name=mol_name,write_atomtypes=True)
+        write_itp_file(itp_out, forcefield, res_names, res_ids, mol_name=mol_name, write_atomtypes=True)
 
         logger.info(f"Successfully generated files for molecule object {idx + 1}: {gro_out} & {itp_out}")
         itp_files_name[idx] = itp_out
@@ -153,5 +153,3 @@ def run_top_mode(rdmol, output_dir, base_name="system", obmol=None):
 
     logger.info(f"Successfully generated total system files: {gro_out} & {top_out}")
     logger.info("===> top mode finished successfully.\n")
-
-

@@ -14,6 +14,7 @@ from rdkit import Chem
 from rdkit import Chem
 from rdkit.Chem import rdFingerprintGenerator
 
+from misc.logger import logger
 from opls._misc import (
     OPLSAtom,
     OPLSBond,
@@ -21,16 +22,13 @@ from opls._misc import (
     OPLSDihedral,
     OPLSImproper
 )
-
+from opls.opls_ml import atom_model, bond_model, angle_model, dihedral_model, improper_model
 from opls.opls_ml._preprocess import mol2torch_graph
-from opls.opls_ml import atom_model, charge_model, bond_model, angle_model, dihedral_model, improper_model
-
-
-from misc.logger import logger
 
 __this_dir__ = os.path.dirname(os.path.abspath(__file__))
 with open(os.path.join(__this_dir__, 'resources', 'gmx', 'non_bond_rules.dat'), 'rb') as f:
     GMXRules = pickle.load(f)
+
 
 def get_submol_with_center_first(mol, center_atom_idx, radius):
     env = Chem.FindAtomEnvironmentOfRadiusN(mol, radius, center_atom_idx, useHs=True)
@@ -155,7 +153,7 @@ def match_atom_by_boss_db(rdmol: Chem.Mol, hashes: dict, database, cache: dict, 
         idx = atom.GetIdx()
         atom_hash = hashes[idx]  # now np.ndarray
         hash_str = np.packbits(atom_hash).tobytes()
-        #print(atom_hash.shape)
+        # print(atom_hash.shape)
         if cache.get(hash_str) is not None:
             if cache.get(hash_str):
                 ret_atom = cache.get(hash_str)
@@ -353,9 +351,10 @@ def match_bonded_by_boss_db(rdmol: Chem.Mol, hashes: dict, database, cache_bd,
             else:
                 ret = False
                 missing.add(dihedral)
-                logger.debug(f"{dihedral}: {rdmol.GetAtomWithIdx(ai).GetSymbol()}-{rdmol.GetAtomWithIdx(aj).GetSymbol()}-"
-                             f"{rdmol.GetAtomWithIdx(ak).GetSymbol()}-{rdmol.GetAtomWithIdx(al).GetSymbol()} "
-                             f"not found in database")
+                logger.debug(
+                    f"{dihedral}: {rdmol.GetAtomWithIdx(ai).GetSymbol()}-{rdmol.GetAtomWithIdx(aj).GetSymbol()}-"
+                    f"{rdmol.GetAtomWithIdx(ak).GetSymbol()}-{rdmol.GetAtomWithIdx(al).GetSymbol()} "
+                    f"not found in database")
             cache_dih[hash_str] = copy.deepcopy(ret)
 
     for improper in missing_improper:
@@ -639,6 +638,7 @@ def match_improper_by_gmx_rule(params_atoms, improper_idx):
             params[ret.indices] = ret
     return params, missing
 
+
 def match_params_ml(rdmol: Chem.Mol, missing_atoms, missing_bonded, missing_impropers):
     atom_params = {}
     bonded_params = {}
@@ -648,7 +648,7 @@ def match_params_ml(rdmol: Chem.Mol, missing_atoms, missing_bonded, missing_impr
     if mol_graph is None:
         logger.error("Failed to convert molecule to graph for ML prediction.")
         return atom_params, bonded_params, improper_params
-    atomtypes = atom_model(mol_graph,rdmol)
+    atomtypes = atom_model(mol_graph, rdmol)
     impropers = improper_model(mol_graph, rdmol)
     if bond_graph is not None:
         bonds = bond_model(mol_graph, rdmol)

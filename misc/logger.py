@@ -67,3 +67,24 @@ def task_file_log_scope(task_name, log_dir):
     finally:
         handler.close()
         logger.removeHandler(handler)
+
+
+@contextmanager
+def mol_file_log_scope(idx, log_dir):
+    """专门为单个分子挂载临时日志文件"""
+    # 假设 logger 是你全局 import 或获取到的那个 task_logger
+    # logger = get_logger("task_logger")
+
+    mol_log_path = os.path.join(log_dir, f"MOL_{idx:03d}.log")
+
+    handler = logging.FileHandler(mol_log_path, encoding='utf-8')
+    handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter(logger_format)  # 使用你原有的 formatter
+    handler.setFormatter(formatter)
+
+    logger.addHandler(handler)
+    try:
+        yield mol_log_path
+    finally:
+        handler.close()
+        logger.removeHandler(handler)
