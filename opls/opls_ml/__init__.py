@@ -1,5 +1,3 @@
-#import sys
-#sys.path.append('E:\\downloads\\article\\high_throughput_system\\software\\DoMDv1.0.2\\DoMD-FF')
 from opls.opls_ml._call import mlcharge, mlnonbond, mlimproper, mlbond, mlangle, mldihedral
 __all__ = ['mlcharge', 'mlnonbond', 'mlimproper', 'mlbond', 'mlangle', 'mldihedral']
 from opls._misc import (
