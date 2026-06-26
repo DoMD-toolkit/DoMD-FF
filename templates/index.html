@@ -104,18 +104,24 @@
 
             <div class="form-group file-status">
                 <div>Mol File: <span id="molDisplay" style="color:blue;">[None]</span></div>
-                <!--<div>Idx File: <span id="idxDisplay" style="color:green;">[None]</span></div>-->
             </div>
 
             <hr style="border: 0; border-top: 1px solid #808080; border-bottom: 1px solid #ffffff; margin: 8px 0;">
 
-            <div class="form-group" style="display: flex; gap: 15px;">
-                <span><input type="checkbox" id="useGMX" checked> <label>GROMACS</label></span>
-                <span><input type="checkbox" id="useBOSS" checked> <label>BOSS</label></span>
-                <span><input type="checkbox" id="useML"> <label>ML Inference</label></span>
+            <div class="form-group" style="display: flex; gap: 15px; flex-wrap: wrap;">
+                <span><input type="checkbox" id="useGMX" checked> <label for="useGMX">GROMACS</label></span>
+                <span><input type="checkbox" id="useBOSS" checked> <label for="useBOSS">BOSS</label></span>
+                <span><input type="checkbox" id="useML"> <label for="useML">ML Inference</label></span>
+                <span><input type="checkbox" id="overwrite"> <label for="overwrite">Overwrite existing</label></span>
             </div>
 
-            <button id="submitBtn" style="margin-top: 5px;">EXECUTE_PIPELINE()</button>
+            <div class="form-group" style="display: flex; gap: 15px; margin-top: 8px; align-items: center;">
+                <span style="font-weight: bold; color: #000080; border-right: 1px solid #808080; padding-right: 10px;">Output Mode</span>
+                <span><input type="radio" name="runMode" id="modeTop" value="top_mode" checked> <label for="modeTop">TOP Mode</label></span>
+                <span><input type="radio" name="runMode" id="modeItp" value="itp_mode"> <label for="modeItp">ITP Mode</label></span>
+            </div>
+
+            <button id="submitBtn" style="margin-top: 8px;">EXECUTE_PIPELINE()</button>
 
             <div id="result-area">
                 <div class="result-row" id="resultMsg">[SYSTEM STANDBY] Output slot empty.</div>
@@ -131,7 +137,7 @@
         </div>
 
         <div class="footer">
-            Copyright &copy; 2000-2026 DoMD-tookit Team. All Rights Reserved.<br>
+            Copyright &copy; 2000-2026 DoMD-toolkit Team. All Rights Reserved.<br>
         </div>
     </div>
 
@@ -152,7 +158,6 @@
         const fileInput = document.getElementById('fileInput');
         const dropzone = document.getElementById('dropzone');
         const molDisplay = document.getElementById('molDisplay');
-        const idxDisplay = document.getElementById('idxDisplay');
         const terminal = document.getElementById('terminal');
         const resultArea = document.getElementById('result-area');
         const resultMsg = document.getElementById('resultMsg');
@@ -183,7 +188,7 @@
                     logToTerminal(`* Memory loaded: ${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`);
                 } else if (name.endsWith('.idx')) {
                     stateFiles.idx = file;
-                    idxDisplay.textContent = file.name;
+                    // 如果未来还需要显示 idx 状态，可以在这里加回去
                     logToTerminal(`* Memory loaded: ${file.name}`);
                 } else {
                     logToTerminal(`! Ignored unknown file type: ${file.name}`);
@@ -265,10 +270,13 @@
             formData.append('files', stateFiles.mol);
             if (stateFiles.idx) formData.append('files', stateFiles.idx);
 
+            // ================= 核心更新：将新增的两个参数打包进 JSON =================
             formData.append('params_json', JSON.stringify({
                 useGMX: document.getElementById('useGMX').checked,
                 useBOSS: document.getElementById('useBOSS').checked,
-                useML: document.getElementById('useML').checked
+                useML: document.getElementById('useML').checked,
+                overwrite: document.getElementById('overwrite').checked,
+                mode: document.querySelector('input[name="runMode"]:checked').value
             }));
 
             try {

@@ -58,28 +58,31 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
 
     with task_file_log_scope(task_name=task_id, log_dir=work_dir) as debug_log_path:
         try:
-            web_logger.info(f"Molecular File: {file_paths.get('mol_file_path')}")
+            if params.get("mode") == "top":
+                web_logger.info(f"Molecular File: {file_paths.get('mol_file_path')}")
 
-            obmol, rdmol, coordinates, res_names, res_ids, box_tensor = molecule_reader(file_paths.get('mol_file_path'))
+                obmol, rdmol, coordinates, res_names, res_ids, box_tensor = molecule_reader(file_paths.get('mol_file_path'))
 
-            web_logger.info(f"Staring to set OPLS force field for system {file_paths.get('mol_file_path')}")
-            forcefield = FF('opls')
-            forcefield.setup(rdmol, obmol, useGMX=params.get("useGMX"),
-                             useBOSS=params.get("useBOSS"), useML=params.get("useML"))
-            if not forcefield.success:
-                raise ValueError("Force field parametrization failed, please check the log files.")
+                web_logger.info(f"Staring to set OPLS force field for system {file_paths.get('mol_file_path')}")
+                forcefield = FF('opls')
+                forcefield.setup(rdmol, obmol, useGMX=params.get("useGMX"),
+                                 useBOSS=params.get("useBOSS"), useML=params.get("useML"))
+                if not forcefield.success:
+                    raise ValueError("Force field parametrization failed, please check the log files.")
 
-            # output
-            web_logger.info("Writing GRO file...")
-            write_gro_file(output_gro_path, coordinates, res_names, res_ids, box_tensor)
-            web_logger.info("Writing TOP file...")
-            params_atom, params_bonded, params_improper = forcefield.params
-            write_top_file(output_top_path, params_atom, params_bonded, params_improper, res_names, res_ids)
+                # output
+                web_logger.info("Writing GRO file...")
+                write_gro_file(output_gro_path, coordinates, res_names, res_ids, box_tensor)
+                web_logger.info("Writing TOP file...")
+                params_atom, params_bonded, params_improper = forcefield.params
+                write_top_file(output_top_path, params_atom, params_bonded, params_improper, res_names, res_ids)
 
-            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                zipf.write(output_gro_path, arcname="output.gro")
-                zipf.write(output_top_path, arcname="output.top")
-                zipf.write(debug_log_path, arcname="debug.log")
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    zipf.write(output_gro_path, arcname="output.gro")
+                    zipf.write(output_top_path, arcname="output.top")
+                    zipf.write(debug_log_path, arcname="debug.log")
+            elif params.get("mode") == "itp":
+                pass
 
         except Exception as e:
             compute_status = "ERROR"
@@ -141,7 +144,7 @@ async def upload_and_run(files: List[UploadFile] = File(...), params_json: str =
 async def stream_logs(task_id: str):
     queue = task_log_queues.get(task_id)
     if not queue:
-        return {"error": "任务不存在或已清理"}
+        return {"error": "File not found."}
 
     async def event_generator():
         try:
