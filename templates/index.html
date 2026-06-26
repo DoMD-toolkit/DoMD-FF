@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>MD AutoFF Pipeline v1.6</title>
+    <title>MD AutoFF Pipeline v1.7</title>
     <style>
         body {
             background-color: #c0c0c0; color: #000000; font-family: "Times New Roman", Times, serif;
@@ -22,15 +22,12 @@
         #terminal-window { flex-grow: 1; display: flex; flex-direction: column; min-height: 0; margin-bottom: 5px; }
         #terminal-container {
             border: 2px inset #fff; background-color: #000000; margin-top: 10px;
-            flex-grow: 1;
-            position: relative; /* 核心防撑爆 1：将父容器设为定位锚点 */
+            flex-grow: 1; position: relative;
         }
         #terminal {
             color: #00ff00; font-family: "Courier New", monospace; font-size: 14px; padding: 10px;
-            /* 核心防撑爆 2：绝对定位，死死钉在父容器的四个角 */
             position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-            box-sizing: border-box; /* 核心防撑爆 3：保证 padding 不会额外撑大体积 */
-            overflow-y: scroll; margin: 0; white-space: pre-wrap;
+            box-sizing: border-box; overflow-y: scroll; margin: 0; white-space: pre-wrap;
         }
 
         #dropzone {
@@ -55,7 +52,6 @@
         button:active { border-top: 2px solid #404040; border-left: 2px solid #404040; border-right: 2px solid #ffffff; border-bottom: 2px solid #ffffff; }
         button:disabled { color: #808080; cursor: not-allowed; }
 
-        /* 复古的小输入框样式 */
         .retro-input {
             background-color: #ffffff; border: 2px inset #ffffff;
             font-family: "Courier New", monospace; font-size: 14px;
@@ -69,14 +65,18 @@
             padding: 10px; margin-top: 10px;
             font-family: Arial, sans-serif; font-weight: bold; text-align: center; box-sizing: border-box;
         }
+
         #result-area.status-success { background-color: #2b579a; color: #ffffff; }
         #result-area.status-error { background-color: #903030; color: #ffffff; }
+        #result-area.status-partial { background-color: #d48800; color: #ffffff; }
 
         .result-row { height: 20px; line-height: 20px; margin-bottom: 5px; }
         #downloadLink { visibility: hidden; text-decoration: underline; font-size: 15px; }
         #downloadLink.active { visibility: visible; }
+
         .status-success #downloadLink { color: #87ceeb; }
         .status-error #downloadLink { color: #ffb6c1; }
+        .status-partial #downloadLink { color: #ffffaa; }
 
         .top-bar {
             background-color: #000080; color: white; padding: 5px 10px;
@@ -89,7 +89,6 @@
             padding: 5px 0; text-shadow: 1px 1px 0px #ffffff;
         }
 
-        /* 弹窗 */
         #modalOverlay {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAABZJREFUeNpi2rVrf2QAAyPj////BwgwAA2SAuN1J1TBAAAAAElFTkSuQmCC');
@@ -104,7 +103,7 @@
 
 <div class="main-wrapper">
     <div class="top-bar">
-        <span>MD AutoFF Pipeline Interface [v1.6 FINAL]</span>
+        <span>MD AutoFF Pipeline Interface [v1.7 FINAL]</span>
         <span>SYS_READY</span>
     </div>
 
@@ -126,18 +125,27 @@
             <span><input id="overwrite" type="checkbox"> <label for="overwrite">Overwrite existing</label></span>
         </div>
 
-        <div class="form-group"
-             style="display: flex; gap: 15px; margin-top: 10px; align-items: center; flex-wrap: wrap;">
-            <span style="font-weight: bold; color: #000080; border-right: 1px solid #808080; padding-right: 10px;">Run Mode</span>
+        <div class="form-group" style="display: flex; gap: 15px; margin-top: 10px; align-items: center; flex-wrap: wrap;">
 
-            <span><input checked id="modeTop" name="run_mode" type="radio" value="top_mode"> <label for="modeTop">TOP Mode</label></span>
-            <span><input id="modeItp" name="run_mode" type="radio" value="itp_mode"> <label
-                    for="modeItp">ITP Mode</label></span>
+            <span style="font-weight: bold; color: #000080;">Run Mode</span>
 
-            <span style="border-left: 1px solid #ffffff; padding-left: 15px; margin-left: 5px; display: flex; align-items: center; gap: 5px;">
-                    <label for="chargeFactor" style="font-weight: bold; color: #000080;">Charge Factor:</label>
-                    <input class="retro-input" id="chargeFactor" step="0.1" type="number" value="1.0">
-                </span>
+            <div style="width: 1px; height: 18px; background-color: #808080;"></div>
+
+            <span style="display: flex; align-items: center; gap: 4px;">
+                <input checked id="modeTop" name="run_mode" type="radio" value="top_mode" style="margin:0;">
+                <label for="modeTop">TOP Mode</label>
+            </span>
+            <span style="display: flex; align-items: center; gap: 4px;">
+                <input id="modeItp" name="run_mode" type="radio" value="itp_mode" style="margin:0;">
+                <label for="modeItp">ITP Mode</label>
+            </span>
+
+            <div style="width: 1px; height: 18px; background-color: #808080;"></div>
+
+            <span style="display: flex; align-items: center; gap: 5px;">
+                <label for="chargeFactor" style="font-weight: bold; color: #000080;">Charge Factor:</label>
+                <input class="retro-input" id="chargeFactor" step="0.1" type="number" value="1.0" style="margin:0;">
+            </span>
         </div>
 
         <button id="submitBtn" style="margin-top: 10px;">EXECUTE_PIPELINE()</button>
@@ -286,8 +294,6 @@
         const formData = new FormData();
         formData.append('files', stateFiles.mol);
 
-        // ================= 最终版 JSON Payload 构造 =================
-        // 确保 charge_factor 作为 float 类型传给后端
         const chargeVal = parseFloat(document.getElementById('chargeFactor').value);
 
         formData.append('params_json', JSON.stringify({
@@ -296,7 +302,7 @@
             useML: document.getElementById('useML').checked,
             overwrite: document.getElementById('overwrite').checked,
             run_mode: document.querySelector('input[name="run_mode"]:checked').value,
-            charge_factor: isNaN(chargeVal) ? 1.0 : chargeVal // 防呆设计，如果输入为空则默认1.0
+            charge_factor: isNaN(chargeVal) ? 1.0 : chargeVal
         }));
 
         try {
@@ -312,13 +318,16 @@
             evtSource.onmessage = function(event) {
                 if (event.data.startsWith("[[DONE_")) {
                     evtSource.close();
-                    const isSuccess = event.data === "[[DONE_SUCCESS]]";
 
-                    resultArea.className = isSuccess ? "status-success" : "status-error";
+                    const statusType = event.data.replace("[[DONE_", "").replace("]]", "");
+                    resultArea.className = `status-${statusType.toLowerCase()}`;
 
-                    if (isSuccess) {
-                        resultMsg.textContent = "COMPUTATION COMPLETE - Results generated successfully.";
+                    if (statusType === "SUCCESS") {
+                        resultMsg.textContent = "COMPUTATION COMPLETE - All results generated successfully.";
                         logToTerminal(">>> Process finished with exit code 0.");
+                    } else if (statusType === "PARTIAL") {
+                        resultMsg.textContent = "PARTIAL SUCCESS - Some modules failed. Review logs for warnings.";
+                        logToTerminal(">>> Process finished with warnings/errors. See debug logs.");
                     } else {
                         resultMsg.textContent = "FATAL ERROR - Computation failed. Download logs for details.";
                         logToTerminal(">>> Process aborted with error. See debug_error.log.");
@@ -331,6 +340,7 @@
                     logToTerminal(event.data);
                 }
             };
+
             evtSource.onerror = () => {
                 logToTerminal("! SSE Stream Interrupted.");
                 evtSource.close();

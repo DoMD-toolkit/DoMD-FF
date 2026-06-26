@@ -111,6 +111,7 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
                 mol_names = []
                 mol_log_paths = []
                 web_logger.info(f"--- Total number of molecule fragments {len(mol_list)} ---")
+                num_success = 0
                 for idx, mol in enumerate(mol_list):
                     with mol_file_log_scope(idx, work_dir) as mol_log_path:
                         mol_log_paths.append(mol_log_path)
@@ -127,7 +128,13 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
                             mol_names.append(f"{idx:03d}")
                             forcefields.append(forcefield)
                             web_logger.info(f"Molecule {idx:03d} parametrization success.")
-
+                            num_success += 1
+                if num_success == len(mol_list):
+                    compute_status = 'SUCCESS'
+                if num_success == 0:
+                    compute_status = 'ERROR'
+                if 0 < num_success < len(mol_list):
+                    compute_status = "PARTIAL"
                 web_logger.info("Writing ITP files...")
                 write_list_itp_files(itp_fns, forcefields, mol_names)
                 web_logger.info("Packaging ITP results and logs into ZIP archive...")
