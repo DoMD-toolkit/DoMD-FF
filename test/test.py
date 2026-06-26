@@ -16,4 +16,3 @@ if __name__ == '__main__':
     obmol, rdmol, coordinates, res_names, res_ids, box_tensor = molecule_reader('test_split_output/split_mols_fixed.sdf')
     forcefield = FF('opls')
     forcefield.setup(rdmol, obmol, useGMX=True, useBOSS=True)
-

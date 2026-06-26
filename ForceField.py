@@ -16,26 +16,27 @@ class FF(object):
         self.obmol = None
         self.success = False
         self._missing = None
+        self.charges = {}
 
     def setup(self, rdmol: Chem.Mol, obmol: ob.OBMol = None, **kwargs):
         self.rdmol = rdmol
-        if obmol is None:
-            obmol = ob.OBMol()
-            if not rdmol.HasConformer():
-                logger.warn("The rdmol has no conformer, "
-                            "if the molecule is large, it will be very slow or may be failed.")
-            sdf_block = Chem.MolToMolBlock(rdmol, forceV3000=True)
-            ob_conv = ob.OBConversion()
-            ob_conv.SetInFormat("sdf")
-            ob_mol = ob.OBMol()
-            success = ob_conv.ReadString(ob_mol, sdf_block)
-            self.obmol = ob_mol
-            if not success:
-                logger.warn("rdmol to obmol failed!")
-                self.obmol = None
+        self.obmol = obmol
+        formal_charge = Chem.GetFormalCharge(rdmol)
+        logger.info(f"Formal charge of molecule {rdmol}: {formal_charge:.4f}")
+        charge_drift = atom_count = 0
+
 
         if self.name == 'opls':
             self.params, self._missing, self.success = opls_setup(rdmol, obmol, **kwargs)
+            if self.success:
+                for idx in self.params[0]:
+                    charge_drift += self.params[0][idx].charge
+                    atom_count += 1
+                logger.info(f"OPLS total charge for {rdmol}: {charge_drift:.4f}")
+                charge_drift /= atom_count
+                for idx in self.params[0]:
+                    self.charges[idx] = self.params[0][idx].charge - charge_drift + formal_charge / atom_count
+                logger.info(f"OPLS reset total charge to formal charge {formal_charge:.4f}.")
 
     # TODO: add MD modules
     def energy(self):
