@@ -46,9 +46,6 @@ def bond_model(atom_graph,molecule):
             bp = bonds_params[(i, j)]
         elif bonds_params.get((j, i)) is not None:
             bp = bonds_params[(j, i)]
-        else:
-            logger.error(f"In custom finder {self.name}, bond {query} with {name} not found.")
-            return
         #OPLSBond = namedtuple("OPLSBond", ["indices", "r0", "k", 'ftype'])
         bonds_ff[(i, j)] =  OPLSBond(indices=(i,j),ftype=1, r0=bp[1], k=bp[2])
         bonds_ff[(j, i)] =  OPLSBond(indices=(j,i),ftype=1, r0=bp[1], k=bp[2])

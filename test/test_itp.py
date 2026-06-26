@@ -1,5 +1,3 @@
-import sys
-sys.path.append('E:\\downloads\\article\\high_throughput_system\\software\\DoMDv1.0.2\\DoMD-FF')
 import os
 from openbabel import pybel as pb
 import numpy as np

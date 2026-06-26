@@ -8,7 +8,6 @@ import tqdm
 import networkx as nx
 
 import sys
-sys.path.append('/Users/zhangxuze/DoMD_v1.0.2/DoMD-FF/')
 from misc.logger import logger
 
 
@@ -152,10 +151,6 @@ for i, mol in enumerate(rdmols):
         x, y, z = float(xyz[0]), float(xyz[1]), float(xyz[2])
         rd_conf.SetAtomPosition(atom_idx, Point3D(x, y, z))
     mol.AddConformer(rd_conf, assignId=True)
-#rdmols_small = []
-#for mol in rdmols:
-#    if mol.GetNumAtoms() > 10000:
-#        continue
-#    rdmols_small.append(mol)
-write_mols_to_sdf(rdmols, "reconstructed_system.sdf", force_v3000=True)
+
+write_mols_to_sdf(rdmols, "test_spe_system.sdf", force_v3000=True)
 

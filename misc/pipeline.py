@@ -29,7 +29,7 @@ def _extract_mol_metadata(mol):
     return coordinates, res_names, res_ids, box_tensor
 
 
-def run_itp_mode(mols, output_dir, base_name="system", obmols=None, molecule_name=None):
+def run_itp_mode(mols, output_dir, obmols=None, molecule_name=None):
     """
     Case 1: itp mode
     Receives a Python list of single RDKit molecule objects.
@@ -65,15 +65,12 @@ def run_itp_mode(mols, output_dir, base_name="system", obmols=None, molecule_nam
     coordinates_meta = {}
     if molecule_name is None:
         molecule_name = {}
-        artificial_names = True
+        for idx in range(num_mols):
+            molecule_name[idx] = f'MOL_{idx:0>4d}'
 
     for idx, mol in enumerate(mols):
-        if num_mols == 1:
-            gro_out = os.path.join(output_dir, f"{base_name}.gro")
-            itp_out = os.path.join(output_dir, f"{base_name}.itp")
-        else:
-            gro_out = os.path.join(output_dir, f"{base_name}_{idx}.gro")
-            itp_out = os.path.join(output_dir, f"{base_name}_{idx}.itp")
+        gro_out = os.path.join(output_dir, f"{molecule_name[idx]}.gro")
+        itp_out = os.path.join(output_dir, f"{molecule_name[idx]}.itp")
 
         # Extract values directly from memory object
         coordinates, res_names, res_ids, box_tensor = _extract_mol_metadata(mol)
@@ -90,8 +87,6 @@ def run_itp_mode(mols, output_dir, base_name="system", obmols=None, molecule_nam
 
         coordinates_meta[idx] = (coordinates, res_names, res_ids, box_tensor, gro_out)
         forcefields_meta[idx] = (forcefield, res_names, res_ids, itp_out)
-        if artificial_names:
-            molecule_name[idx] = f'MOL_{idx}' if num_mols > 1 else base_name
 
     # 3. Deduplicate atomtypes globally across all structures
     params_atom_all = {}

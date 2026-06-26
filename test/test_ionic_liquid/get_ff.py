@@ -1,5 +1,4 @@
 import sys
-sys.path.append('E:\\downloads\\article\\high_throughput_system\\software\\DoMDv1.0.2\\DoMD-FF')
 
 from misc.pipeline import run_itp_mode, run_top_mode
 from misc.parser import molecule_reader
@@ -47,12 +46,6 @@ AllChem.UFFOptimizeMolecule(rdmol)
 obmol = None
 rdmols = [rdmol]
 # ---- Test Case 1: itp mode ----
-#test_output_dir = 'E:\\downloads\\article\\high_throughput_system\\software\\DoMDv1.0.2\\DoMD-FF\\test\\test_ionic_liquid\\output'
-#run_itp_mode(rdmols, test_output_dir, base_name="itp_component")
-#run_top_mode(rdmol, test_output_dir, base_name="top_system", obmol=obmol)
-from ForceField import FF
-ff = FF('opls')
-ff.setup(rdmol, useGMX=False, useBOSS=True, overwrite=False, useML=False)
-params_atom, params_bonded, params_improper = ff.params
-for i, atom in params_atom.items():
-    print(atom)
+test_output_dir = 'output'
+run_itp_mode(rdmols, test_output_dir)
+run_top_mode(rdmol, test_output_dir, base_name="top_system", obmol=obmol)

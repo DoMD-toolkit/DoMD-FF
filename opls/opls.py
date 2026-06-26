@@ -180,9 +180,9 @@ def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True, useBOSS=Fal
         params_atoms.update(opls_ml_atoms)
         params_bonded.update(opls_ml_bonded)
         params_impropers.update(opls_ml_improper)
-    logger.error(f"Total Found atoms/Total atoms: {len(params_atoms)}/{rdmol.GetNumAtoms()}")
+    logger.info(f"Total Found atoms/Total atoms: {len(params_atoms)}/{rdmol.GetNumAtoms()}")
     m_b, m_a, m_d = count_bonded(params_bonded)
-    logger.error(f"Found bonds/Total angles/Total dihedrals/Total impropers/Total: {m_b}/{len(bond_idx)}"
+    logger.info(f"Found bonds/Total angles/Total dihedrals/Total impropers/Total: {m_b}/{len(bond_idx)}"
                 f" {m_a}/{len(angle_idx)} {m_d}/{len(dihedral_idx)} {len(params_impropers)}/{len(improper_idx)}")
 
     success = (len(params_atoms) == rdmol.GetNumAtoms() and m_b == len(bond_idx) and m_a == len(

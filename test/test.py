@@ -1,6 +1,4 @@
 import sys
-sys.path.append('E:\\downloads\\article\\high_throughput_system\\software\\DoMDv1.0.2\\DoMD-FF')
-
 from ForceField import FF
 
 
@@ -21,8 +19,3 @@ if __name__ == '__main__':
     forcefield = FF('opls')
     forcefield.setup(rdmol, obmol, useGMX=True, useBOSS=True, overwrite=False, useML=True)
     params_atom, params_bonded, params_improper =  forcefield.params
-    for k in params_improper:
-        print(f"{k}: {params_improper[k]}")
-    #write_gro_file('test_data/test_system.gro', coordinates, res_names, res_ids, box_tensor)
-    #write_top_file('test_data/test_system.top', params_atom, params_bonded, params_improper, res_names, res_ids)
-    #write_itp_file('test_data/test_system.itp', params_atom, params_bonded, params_improper, res_names, res_ids)
