@@ -13,6 +13,8 @@ from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from fastapi.responses import HTMLResponse
 from sse_starlette.sse import EventSourceResponse
+import copy
+from rdkit.Chem import rdMolDescriptors, rdMolHash
 
 from ForceField import FF
 from misc.io.gmx import write_gro_file, write_top_file, write_list_itp_files
@@ -104,6 +106,7 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
                     zipf.write(debug_log_path, arcname="debug.log")
 
             elif params.get("run_mode") == "itp_mode":
+                _cache = {}
                 atomtypes_path = os.path.join(work_dir, "atomtypes.itp")
                 mol_list = molecule_reader_list(file_paths.get('mol_file_path'))
                 itp_fns = []
@@ -113,22 +116,42 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
                 web_logger.info(f"--- Total number of molecule fragments {len(mol_list)} ---")
                 num_success = 0
                 for idx, mol in enumerate(mol_list):
-                    with mol_file_log_scope(idx, work_dir) as mol_log_path:
-                        mol_log_paths.append(mol_log_path)
-                        web_logger.info(f"--- Starting parametrization for Molecule {idx:03d} ---")
-                        forcefield = FF('opls')
-                        forcefield.setup(mol, obmol=None, useGMX=params.get("useGMX"),
-                                         useBOSS=params.get("useBOSS"), useML=params.get("useML"),
-                                         overwrite=params.get("overwrite"), charge_factor=params.get("charge_factor"))
-                        if not forcefield.success:
-                            web_logger.error(f"Force field for molecule {idx:03d} parametrization "
-                                             f"failed, please check this log file.")
-                        else:
-                            itp_fns.append(os.path.join(work_dir, f"{idx:03d}.itp"))
-                            mol_names.append(f"{idx:03d}")
+                    wl_hash = rdMolHash.MolHash(mol, rdMolHash.HashFunction.AnonymousGraph)
+                    ret = _cache.get(wl_hash)
+                    if ret is not None:
+                        if not ret['notfound']:
+                            forcefield = FF('opls')
+                            forcefield.params = ret['params']
+                            forcefield.charges = ret['charges']
+                            itp_fns.append(os.path.join(work_dir, f"{idx:06d}_{ret['idx']:06d}.itp"))
+                            mol_names.append(f"{idx:06d}")
                             forcefields.append(forcefield)
-                            web_logger.info(f"Molecule {idx:03d} parametrization success.")
+                            web_logger.info(f"Molecule {idx:06d} parametrization success (cache {ret['idx']}).")
                             num_success += 1
+                        else:
+                            web_logger.info(f"Molecule {idx:06d} parametrization failed (cache {ret['idx']}).")
+                    else:
+                        with mol_file_log_scope(idx, work_dir) as mol_log_path:
+                            mol_log_paths.append(mol_log_path)
+                            web_logger.info(f"--- Starting parametrization for Molecule {idx:06d} ---")
+                            forcefield = FF('opls')
+                            forcefield.setup(mol, obmol=None, useGMX=params.get("useGMX"),
+                                             useBOSS=params.get("useBOSS"), useML=params.get("useML"),
+                                             overwrite=params.get("overwrite"), charge_factor=params.get("charge_factor"))
+                            if not forcefield.success:
+                                web_logger.error(f"Force field for molecule {idx:06d} parametrization "
+                                                 f"failed, please check this log file.")
+                                _cache[wl_hash] = {'notfound': True, 'idx': idx}
+                            else:
+                                itp_fns.append(os.path.join(work_dir, f"{idx:06d}.itp"))
+                                mol_names.append(f"{idx:06d}")
+                                forcefields.append(forcefield)
+                                web_logger.info(f"Molecule {idx:06d} parametrization success.")
+                                num_success += 1
+                                _cache[wl_hash] = {'params': copy.deepcopy(forcefield.params),
+                                                   'charges': copy.deepcopy(forcefield.charges),
+                                                   'idx': idx,
+                                                   'notfound': False}
                 if num_success == len(mol_list):
                     compute_status = 'SUCCESS'
                 if num_success == 0:
