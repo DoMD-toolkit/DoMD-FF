@@ -25,7 +25,7 @@ We provide a lightweight Web User Interface for immediate testing. You can start
 python server.py
 ```
 
-Then, access the tool via your browser at `http://localhost:8000`.
+Then, access the tool via your browser at `http://localhost:8000`. Please read section **Data Structures & Input Formats (WebUI)** and **Workflows & Design Philosophy (WebUI)** for details.
 
 ### Core API Usage
 
