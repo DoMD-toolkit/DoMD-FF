@@ -82,7 +82,7 @@ def write_gro_file(output_path, coordinates, res_names, res_ids, box_tensor, ato
 
 
 
-def write_top_file(output_path, ff, res_names, res_ids, unique_atomtypes=None, atomidx2atomtype=None):
+def write_top_file(output_path, ff, res_names, res_ids):
     """
     工业级 GROMACS .top 拓扑文件写出器
     支持百万/千万级超大体系，支持 OPLS-AA 力场参数的原子类型自动去重。
@@ -98,8 +98,7 @@ def write_top_file(output_path, ff, res_names, res_ids, unique_atomtypes=None, a
 
     params_atom, params_bonded, params_improper = ff.params
     charges = ff.charges
-    if unique_atomtypes is None and atomidx2atomtype is None:
-        unique_atomtypes, atomidx2atomtype = map_unique_atomtypes(params_atom)
+    unique_atomtypes, atomidx2atomtype = map_unique_atomtypes(params_atom)
 
     bonds_list = []
     angles_list = []
