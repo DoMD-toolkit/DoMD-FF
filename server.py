@@ -76,9 +76,9 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
 
     with task_file_log_scope(task_name=task_id, log_dir=work_dir) as debug_log_path:
         web_logger.info(f"Starting TASK {task_id}...")
-        web_logger.info(f"Parameters: useGMX: {params.get("useGMX")} useBOSS: {params.get("useBOSS")}"
-                        f" useML: {params.get("useML")} overwrite: {params.get("overwrite")} "
-                        f"charge_factor: {params.get("charge_factor")}")
+        web_logger.info(f"Parameters: useGMX: {params.get('useGMX')} useBOSS: {params.get('useBOSS')}"
+                        f" useML: {params.get('useML')} overwrite: {params.get('overwrite')} "
+                        f"charge_factor: {params.get('charge_factor')}")
         try:
             web_logger.info(f"Molecular File: {file_paths.get('mol_file_path')}")
             if params.get("run_mode") == "top_mode":
