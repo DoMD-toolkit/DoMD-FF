@@ -1,19 +1,10 @@
-import asyncio
-import contextlib
 import json
 import logging
 import os
-import shutil
-import traceback
-import uuid
-import zipfile
-from typing import List
-
-from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import FileResponse
-from fastapi.responses import HTMLResponse
-from sse_starlette.sse import EventSourceResponse
 import copy
+import traceback
+import zipfile
+import redis
 from rdkit.Chem import rdMolDescriptors, rdMolHash
 
 from ForceField import FF
@@ -21,64 +12,66 @@ from misc.io.gmx import write_gro_file, write_top_file, write_list_itp_files
 from misc.logger import task_file_log_scope, mol_file_log_scope
 from misc.parser import molecule_reader, molecule_reader_list
 
-app = FastAPI(title="P2P FF parameterizer server")
-
 WORKSPACE_BASE = "./workspaces"
-os.makedirs(WORKSPACE_BASE, exist_ok=True)
-
-task_log_queues = {}
+redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
 
-def setup_task_logger(task_id: str, log_queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
+def setup_worker_logger(task_id: str):
     logger = logging.getLogger(f"task_{task_id}")
     logger.setLevel(logging.INFO)
 
     if logger.handlers:
         logger.handlers.clear()
 
-    class AsyncQueueHandler(logging.Handler):
+    class RedisPubSubHandler(logging.Handler):
+        def __init__(self, r_client, channel):
+            super().__init__()
+            self.r_client = r_client
+            self.channel = channel
+
         def emit(self, record):
             if record.levelno >= logging.INFO:
                 msg = self.format(record)
-                loop.call_soon_threadsafe(log_queue.put_nowait, msg)
+                self.r_client.publish(self.channel, msg)
 
-    queue_handler = AsyncQueueHandler()
-    queue_handler.setLevel(logging.INFO)
-    # queue_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
-    queue_handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
+    channel_name = f"log_channel_{task_id}"
+    pubsub_handler = RedisPubSubHandler(redis_client, channel_name)
+    pubsub_handler.setLevel(logging.INFO)
+    pubsub_handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
 
-    logger.addHandler(queue_handler)
+    logger.addHandler(pubsub_handler)
     return logger
 
 
-def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: str, log_queue: asyncio.Queue,
-                      loop: asyncio.AbstractEventLoop):
-    # 记录状态
+def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: str):
     compute_status = "SUCCESS"
     zip_path = os.path.join(WORKSPACE_BASE, f"{task_id}_result.zip")
-    web_logger = setup_task_logger(task_id, log_queue, loop)
+
+    web_logger = setup_worker_logger(task_id)
 
     with task_file_log_scope(task_name=task_id, log_dir=work_dir) as debug_log_path:
-        web_logger.info(f"Starting TASK {task_id}...")
-        web_logger.info(f"Parameters: useGMX: {params.get('useGMX')} useBOSS: {params.get('useBOSS')}"
-                        f" useML: {params.get('useML')} overwrite: {params.get('overwrite')} "
+        web_logger.info(f"Starting TASK {task_id} on compute node...")
+        web_logger.info(f"Parameters: useGMX: {params.get('useGMX')} useBOSS: {params.get('useBOSS')} "
+                        f"useML: {params.get('useML')} overwrite: {params.get('overwrite')} "
                         f"charge_factor: {params.get('charge_factor')}")
         try:
             web_logger.info(f"Molecular File: {file_paths.get('mol_file_path')}")
+
             if params.get("run_mode") == "top_mode":
                 output_gro_path = os.path.join(work_dir, "output.gro")
                 output_top_path = os.path.join(work_dir, "output.top")
                 obmol, rdmol, coordinates, res_names, res_ids, box_tensor = molecule_reader(
                     file_paths.get('mol_file_path'))
                 web_logger.info(f"Staring to set OPLS force field for system {file_paths.get('mol_file_path')}")
+
                 forcefield = FF('opls')
                 forcefield.setup(rdmol, obmol, useGMX=params.get("useGMX"),
                                  useBOSS=params.get("useBOSS"), useML=params.get("useML"),
                                  overwrite=params.get("overwrite"), charge_factor=params.get("charge_factor"))
+
                 if not forcefield.success:
                     raise ValueError("Force field parameterization failed, please check the log files.")
 
-                # output
                 web_logger.info("Writing GRO file...")
                 write_gro_file(output_gro_path, coordinates, res_names, res_ids, box_tensor)
                 web_logger.info("Writing TOP file...")
@@ -93,12 +86,11 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
                 _cache = {}
                 atomtypes_path = os.path.join(work_dir, "atomtypes.itp")
                 mol_list = molecule_reader_list(file_paths.get('mol_file_path'))
-                itp_fns = []
-                forcefields = []
-                mol_names = []
-                mol_log_paths = []
+                itp_fns, forcefields, mol_names, mol_log_paths = [], [], [], []
+
                 web_logger.info(f"--- Total number of molecule fragments {len(mol_list)} ---")
                 num_success = 0
+
                 for idx, mol in enumerate(mol_list):
                     wl_hash = rdMolHash.MolHash(mol, rdMolHash.HashFunction.AnonymousGraph)
                     ret = _cache.get(wl_hash)
@@ -118,13 +110,15 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
                         with mol_file_log_scope(idx, work_dir) as mol_log_path:
                             mol_log_paths.append(mol_log_path)
                             web_logger.info(f"--- Starting parametrization for Molecule {idx:06d} ---")
+
                             forcefield = FF('opls')
                             forcefield.setup(mol, obmol=None, useGMX=params.get("useGMX"),
                                              useBOSS=params.get("useBOSS"), useML=params.get("useML"),
-                                             overwrite=params.get("overwrite"), charge_factor=params.get("charge_factor"))
+                                             overwrite=params.get("overwrite"),
+                                             charge_factor=params.get("charge_factor"))
+
                             if not forcefield.success:
-                                web_logger.error(f"Force field for molecule {idx:06d} parametrization "
-                                                 f"failed, please check the log file.")
+                                web_logger.error(f"Force field for molecule {idx:06d} parametrization failed.")
                                 _cache[wl_hash] = {'notfound': True, 'idx': idx}
                             else:
                                 itp_fns.append(os.path.join(work_dir, f"{idx:06d}.itp"))
@@ -132,19 +126,23 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
                                 forcefields.append(forcefield)
                                 web_logger.info(f"Molecule {idx:06d} parametrization success.")
                                 num_success += 1
-                                _cache[wl_hash] = {'params': copy.deepcopy(forcefield.params),
-                                                   'charges': copy.deepcopy(forcefield.charges),
-                                                   'idx': idx,
-                                                   'notfound': False}
+                                _cache[wl_hash] = {
+                                    'params': copy.deepcopy(forcefield.params),
+                                    'charges': copy.deepcopy(forcefield.charges),
+                                    'idx': idx, 'notfound': False
+                                }
+
                 if num_success == len(mol_list):
                     compute_status = 'SUCCESS'
-                if num_success == 0:
+                elif num_success == 0:
                     compute_status = 'ERROR'
-                if 0 < num_success < len(mol_list):
+                else:
                     compute_status = "PARTIAL"
+
                 if num_success > 0:
                     web_logger.info("Writing ITP files...")
                     write_list_itp_files(itp_fns, forcefields, mol_names)
+
                 web_logger.info("Packaging ITP results and logs into ZIP archive...")
                 with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                     if os.path.exists(debug_log_path):
@@ -162,93 +160,33 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
         except Exception as e:
             compute_status = "ERROR"
             web_logger.error(f"Error: {str(e)}")
-            web_logger.debug(traceback.format_exc())
+            web_logger.error(traceback.format_exc())
 
             with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 zipf.write(debug_log_path, arcname="debug_error.log")
 
-    loop.call_soon_threadsafe(log_queue.put_nowait, f"[[DONE_{compute_status}]]")
-    # shutil.rmtree(work_dir, ignore_errors=True)
+    redis_client.publish(f"log_channel_{task_id}", f"[[DONE_{compute_status}]]")
 
 
-@app.get("/", response_class=HTMLResponse)
-async def serve_frontend():
-    if not os.path.exists("templates/index.html"):
-        return "<h1>Error: index.html not found in current directory!</h1>"
-    return FileResponse("templates/index.html")
-
-
-@app.post("/api/upload_and_run")
-async def upload_and_run(files: List[UploadFile] = File(...), params_json: str = Form(...)):
-    task_id = f"task_{uuid.uuid4().hex[:8]}"
-    work_dir = os.path.join(WORKSPACE_BASE, task_id)
-    os.makedirs(work_dir, exist_ok=True)
-
-    file_paths = {
-        "mol_file_path": None,
-        "index_file_path": None
-    }
-
-    for file in files:
-        filepath = os.path.join(work_dir, file.filename)
-        with open(filepath, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
-        if file.filename.lower().endswith(('.pdb', '.sdf')):
-            file_paths["mol_file_path"] = filepath
-        elif file.filename.lower().endswith('.idx'):
-            file_paths["index_file_path"] = filepath
-
-    params = json.loads(params_json)
-
-    if not file_paths["mol_file_path"]:
-        return {"status": "error", "error": "Missing .pdb or .sdf file"}
-
-    log_queue = asyncio.Queue()
-    task_log_queues[task_id] = log_queue
-    loop = asyncio.get_running_loop()
-
-    asyncio.create_task(asyncio.to_thread(
-        run_heavy_compute, task_id, file_paths, params, work_dir, log_queue, loop
-    ))
-
-    return {"status": "success", "task_id": task_id}
-
-
-@app.get("/api/stream_logs/{task_id}")
-async def stream_logs(task_id: str):
-    queue = task_log_queues.get(task_id)
-    if not queue:
-        return {"error": "File not found."}
-
-    async def event_generator():
+def main():
+    print("[SYSTEM] Worker Node Online. Waiting for tasks from Redis...")
+    while True:
         try:
-            while True:
-                msg = await queue.get()
-                if msg == "[[DONE]]":
-                    yield {"data": "[[DONE]]"}
-                    break
-                yield {"data": msg}
-        finally:
-            task_log_queues.pop(task_id, None)
+            queue_name, message = redis_client.blpop('md_task_queue', 0)
+            task_data = json.loads(message)
 
-    return EventSourceResponse(event_generator())
+            task_id = task_data['task_id']
+            file_paths = task_data['file_paths']
+            params = task_data['params']
+            work_dir = task_data['work_dir']
 
+            print(f"[SYSTEM] Task {task_id} received. Executing...")
+            run_heavy_compute(task_id, file_paths, params, work_dir)
+            print(f"[SYSTEM] Task {task_id} completed.")
 
-@app.get("/api/download/{task_id}")
-async def download_result(task_id: str):
-    zip_path = os.path.join(WORKSPACE_BASE, f"{task_id}_result.zip")
-    if not os.path.exists(zip_path):
-        return {"error": "File not exists or calculation failed."}
-
-    return FileResponse(
-        path=zip_path,
-        filename=f"{task_id}_result.zip",
-        media_type="application/zip"
-    )
+        except Exception as e:
+            print(f"[FATAL] Worker loop error: {e}")
 
 
 if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    main()
