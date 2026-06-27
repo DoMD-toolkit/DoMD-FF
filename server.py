@@ -61,7 +61,8 @@ def setup_task_logger(task_id: str, log_queue: asyncio.Queue, loop: asyncio.Abst
 
     queue_handler = AsyncQueueHandler()
     queue_handler.setLevel(logging.INFO)
-    queue_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+    # queue_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+    queue_handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
 
     logger.addHandler(queue_handler)
     return logger
@@ -92,7 +93,7 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
                                  useBOSS=params.get("useBOSS"), useML=params.get("useML"),
                                  overwrite=params.get("overwrite"), charge_factor=params.get("charge_factor"))
                 if not forcefield.success:
-                    raise ValueError("Force field parametrization failed, please check the log files.")
+                    raise ValueError("Force field parameterization failed, please check the log files.")
 
                 # output
                 web_logger.info("Writing GRO file...")
@@ -140,7 +141,7 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
                                              overwrite=params.get("overwrite"), charge_factor=params.get("charge_factor"))
                             if not forcefield.success:
                                 web_logger.error(f"Force field for molecule {idx:06d} parametrization "
-                                                 f"failed, please check this log file.")
+                                                 f"failed, please check the log file.")
                                 _cache[wl_hash] = {'notfound': True, 'idx': idx}
                             else:
                                 itp_fns.append(os.path.join(work_dir, f"{idx:06d}.itp"))
@@ -158,8 +159,9 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
                     compute_status = 'ERROR'
                 if 0 < num_success < len(mol_list):
                     compute_status = "PARTIAL"
-                web_logger.info("Writing ITP files...")
-                write_list_itp_files(itp_fns, forcefields, mol_names)
+                if num_success > 0:
+                    web_logger.info("Writing ITP files...")
+                    write_list_itp_files(itp_fns, forcefields, mol_names)
                 web_logger.info("Packaging ITP results and logs into ZIP archive...")
                 with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                     if os.path.exists(debug_log_path):
@@ -170,7 +172,8 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
                     for ml_log in mol_log_paths:
                         if os.path.exists(ml_log):
                             zipf.write(ml_log, arcname=os.path.basename(ml_log))
-                    zipf.write(atomtypes_path, arcname=os.path.basename(atomtypes_path))
+                    if os.path.exists(atomtypes_path):
+                        zipf.write(atomtypes_path, arcname=os.path.basename(atomtypes_path))
                 web_logger.info("Zip package created successfully.")
 
         except Exception as e:
