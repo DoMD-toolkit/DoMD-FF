@@ -30,7 +30,7 @@ def map_unique_atomtypes(params_atom):
     return unique_atomtypes, atomidx2atomtypes
 
 
-def write_gro_file(output_path, coordinates, res_names, res_ids, box_tensor, atom_names=[]):
+def write_gro_file(output_path, coordinates, box_tensor, res_names=None, res_ids=None, atom_names=[]):
     """
     :: params:
         coordinates: Nx3 (unit A)
@@ -40,6 +40,10 @@ def write_gro_file(output_path, coordinates, res_names, res_ids, box_tensor, ato
                     or length of 3 ordered in boxl_x, boxl_y, boxl_z
     """
     num_atoms = len(coordinates)
+    if res_ids is None:
+        res_ids = [0] * num_atoms
+    if res_names is None:
+        res_names = ['UNL'] * num_atoms
 
     # box_tensor : v1(x) v2(y) v3(z) v1(y) v1(z) v2(x) v2(z) v3(x) v3(y)
     if len(box_tensor) < 9:
