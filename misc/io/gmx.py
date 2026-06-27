@@ -82,7 +82,7 @@ def write_gro_file(output_path, coordinates, res_names, res_ids, box_tensor, ato
 
 
 
-def write_top_file(output_path, ff, res_names, res_ids):
+def write_top_file(output_path, ff, res_names=None, res_ids=None):
     """
     工业级 GROMACS .top 拓扑文件写出器
     支持百万/千万级超大体系，支持 OPLS-AA 力场参数的原子类型自动去重。
@@ -103,6 +103,12 @@ def write_top_file(output_path, ff, res_names, res_ids):
     bonds_list = []
     angles_list = []
     dihedrals_list = []
+
+    num_atoms = len(params_atom)
+    if res_ids is None:
+        res_ids = [0]*num_atoms
+    if res_names is None:
+        res_names = ['UNL']*num_atoms
 
     for indices, item in params_bonded.items():
         if len(indices) == 2:
