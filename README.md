@@ -93,7 +93,7 @@ Example: `test/test_data/test_system.sdf`
 
 ---
 
-## Workflows & Design Philosophy
+## Workflows & Design Philosophy (WebUI)
 
 To accommodate different simulation needs in GROMACS, the pipeline offers two distinct processing modes: **TOP Mode (System-Level)** and **ITP Mode (Molecule-Level)**. Regardless of the input file format, the initial step always reads the data into a single `rdmol` object before routing it to the selected workflow.
 
