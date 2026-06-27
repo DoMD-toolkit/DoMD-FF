@@ -1,5 +1,5 @@
 import asyncio
-import contextlib
+import copy
 import json
 import logging
 import os
@@ -12,9 +12,8 @@ from typing import List
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from fastapi.responses import HTMLResponse
+from rdkit.Chem import rdMolHash
 from sse_starlette.sse import EventSourceResponse
-import copy
-from rdkit.Chem import rdMolDescriptors, rdMolHash
 
 from ForceField import FF
 from misc.io.gmx import write_gro_file, write_top_file, write_list_itp_files
@@ -121,7 +120,8 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
                             forcefield = FF('opls')
                             forcefield.setup(mol, obmol=None, useGMX=params.get("useGMX"),
                                              useBOSS=params.get("useBOSS"), useML=params.get("useML"),
-                                             overwrite=params.get("overwrite"), charge_factor=params.get("charge_factor"))
+                                             overwrite=params.get("overwrite"),
+                                             charge_factor=params.get("charge_factor"))
                             if not forcefield.success:
                                 web_logger.error(f"Force field for molecule {idx:06d} parametrization "
                                                  f"failed, please check the log file.")

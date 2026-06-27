@@ -1,11 +1,12 @@
+import copy
 import json
 import logging
 import os
-import copy
 import traceback
 import zipfile
+
 import redis
-from rdkit.Chem import rdMolDescriptors, rdMolHash
+from rdkit.Chem import rdMolHash
 
 from ForceField import FF
 from misc.io.gmx import write_gro_file, write_top_file, write_list_itp_files

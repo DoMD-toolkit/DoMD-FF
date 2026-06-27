@@ -1,14 +1,13 @@
-import asyncio
 import json
 import os
 import shutil
 import uuid
 from typing import List
 
+import redis.asyncio as aioredis
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import FileResponse, HTMLResponse
 from sse_starlette.sse import EventSourceResponse
-import redis.asyncio as aioredis
 
 app = FastAPI(title="P2P FF parameterizer server")
 

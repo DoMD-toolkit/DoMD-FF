@@ -85,7 +85,6 @@ def write_gro_file(output_path, coordinates, box_tensor, res_names=None, res_ids
         f.write(box_line)
 
 
-
 def write_top_file(output_path, ff, res_names=None, res_ids=None):
     """
     工业级 GROMACS .top 拓扑文件写出器
@@ -110,9 +109,9 @@ def write_top_file(output_path, ff, res_names=None, res_ids=None):
 
     num_atoms = len(params_atom)
     if res_ids is None:
-        res_ids = [0]*num_atoms
+        res_ids = [0] * num_atoms
     if res_names is None:
-        res_names = ['UNL']*num_atoms
+        res_names = ['UNL'] * num_atoms
 
     for indices, item in params_bonded.items():
         if len(indices) == 2:
@@ -209,7 +208,8 @@ def write_top_file(output_path, ff, res_names=None, res_ids=None):
         f.write("SystemMolecule    1\n")
 
 
-def write_itp_file(output_path, ff, res_names=None, res_ids=None, mol_name="MOL", unique_atomtypes=None, atomidx2atomtype=None,
+def write_itp_file(output_path, ff, res_names=None, res_ids=None, mol_name="MOL", unique_atomtypes=None,
+                   atomidx2atomtype=None,
                    write_atomtypes=False):
     """
     :: params:
@@ -448,7 +448,8 @@ def write_list_itp_files(output_path, forcefields, molecule_name, list_res_names
         list_res_names = list_res_names + [None] * (len(molecule_name) - len(list_res_names))
     if len(list_res_ids) < len(molecule_name):
         list_res_ids = list_res_ids + [None] * (len(molecule_name) - len(list_res_ids))
-    for out_p, ff, mol_n, default_res_names, default_res_ids in zip(output_path, forcefields, molecule_name, list_res_names, list_res_ids):
+    for out_p, ff, mol_n, default_res_names, default_res_ids in zip(output_path, forcefields, molecule_name,
+                                                                    list_res_names, list_res_ids):
         params_atom, _, _ = ff.params
         local_atomidx2atomtype = {}
 
