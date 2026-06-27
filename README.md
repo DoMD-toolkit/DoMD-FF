@@ -59,6 +59,7 @@ success = forcefield.success
 * **`useGMX`** *(bool)*: Set to `True` to enable parameter assignment via moltemplate.
 * **`useBOSS`** *(bool)*: Set to `True` to enable searching within the BOSS database.
 * **`useML`** *(bool)*: Set to `True` to enable machine learning (ML) inference for parameter prediction.
+* **`charge_factor`** *(float, optional)*: atom_charge = charge_factor * atom_charge, default is 1.0.
 * **`overwrite`** *(bool)*: Determines the priority of parameter assignment. The default execution sequence is **GMX ->
   BOSS -> ML**. If `False` (default), the pipeline only fills in missing parameters. If `True`, subsequent methods will
   forcefully overwrite parameters assigned by earlier ones. *(Note: If both `overwrite=True` and `useML=True`, the
