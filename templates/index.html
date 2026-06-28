@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>DoMD AutoFF Pipeline v1.0</title>
@@ -202,8 +202,15 @@
     const resultArea = document.getElementById('result-area');
     const resultMsg = document.getElementById('resultMsg');
     const downloadLink = document.getElementById('downloadLink');
+    const submitBtn = document.getElementById('submitBtn');
+
+    const TASK_STORAGE_KEY = "domd_active_task_v1";
+    const TERMINAL_STATES = new Set(["SUCCESS", "PARTIAL", "ERROR", "NOT_FOUND"]);
 
     let stateFiles = { mol: null };
+    let activeEventSource = null;
+    let activeTaskId = null;
+    let recoveryInFlight = false;
 
     function showModal(msg, isError = true) {
         document.getElementById('modalTitleText').textContent = isError ? "CRITICAL_ERROR" : "SYS_INFO";
@@ -211,19 +218,72 @@
         document.getElementById('modalMsg').textContent = msg;
         document.getElementById('modalOverlay').style.display = "flex";
     }
-    function closeModal() { document.getElementById('modalOverlay').style.display = "none"; }
 
-    // ================= 核心更新：高精度语法高亮渲染器 =================
+    function closeModal() {
+        document.getElementById('modalOverlay').style.display = "none";
+    }
+
+    function generateTaskId() {
+        if (window.crypto && typeof window.crypto.randomUUID === "function") {
+            return `task_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+        }
+
+        if (window.crypto && typeof window.crypto.getRandomValues === "function") {
+            const bytes = new Uint8Array(16);
+            window.crypto.getRandomValues(bytes);
+            const hex = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+            return `task_${hex}`;
+        }
+
+        throw new Error("Browser cryptographic random generator is unavailable.");
+    }
+
+    function getStoredTask() {
+        try {
+            const raw = localStorage.getItem(TASK_STORAGE_KEY);
+            return raw ? JSON.parse(raw) : null;
+        } catch (err) {
+            localStorage.removeItem(TASK_STORAGE_KEY);
+            return null;
+        }
+    }
+
+    function saveStoredTask(record) {
+        localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify({
+            ...record,
+            updatedAt: Date.now()
+        }));
+    }
+
+    function markStoredTaskFinal(taskId, state) {
+        const existing = getStoredTask();
+        if (!existing || existing.taskId !== taskId) return;
+
+        saveStoredTask({
+            ...existing,
+            state,
+            terminal: true,
+            checked: true
+        });
+    }
+
+    function clearStoredTaskIfExpired() {
+        const existing = getStoredTask();
+        if (!existing) return;
+
+        const ageMs = Date.now() - (existing.createdAt || 0);
+        if (ageMs > 24 * 60 * 60 * 1000 || existing.checked === true) {
+            localStorage.removeItem(TASK_STORAGE_KEY);
+        }
+    }
+
     function logToTerminal(msg) {
         const time = new Date().toTimeString().split(' ')[0];
         const lineContainer = document.createElement('span');
-        lineContainer.style.color = '#00ff00'; // 默认全行绿色字体
+        lineContainer.style.color = '#00ff00';
 
-        // 先追加时间戳前缀
         lineContainer.appendChild(document.createTextNode(`\n[${time}] `));
 
-        // 正则表达式魔法：捕获开头的标签（兼容 "INFO:", "[WARN]", "ERROR - " 等格式）
-        // 逻辑: ^(前面可能有空格或中括号)(核心等级单词)(后面可能有空格、冒号、连字符或右中括号)(真实的日志内容)
         const match = msg.match(/^([\[\s]*)(ERROR|FATAL|WARNING|WARN|PARTIAL|INFO)([\s\]:\-]*)([\s\S]*)$/i);
 
         if (match) {
@@ -232,34 +292,27 @@
             const postPunctuation = match[3];
             const restOfMsg = match[4];
 
-            // 决定高亮颜色
-            let levelColor = '#00ff00'; 
+            let levelColor = '#00ff00';
             const upLevel = levelWord.toUpperCase();
             if (upLevel === 'ERROR' || upLevel === 'FATAL') {
-                levelColor = '#ff3333'; // CRT 警告红
+                levelColor = '#ff3333';
             } else if (upLevel === 'WARNING' || upLevel === 'WARN' || upLevel === 'PARTIAL') {
-                levelColor = '#ffcc00'; // CRT 琥珀黄
+                levelColor = '#ffcc00';
             } else if (upLevel === 'INFO') {
-                levelColor = '#33ccff'; // CRT 青蓝
+                levelColor = '#33ccff';
             }
 
-            // 1. 拼接前缀标点 (如 "[")
             if (prePunctuation) lineContainer.appendChild(document.createTextNode(prePunctuation));
 
-            // 2. 拼接变色的核心 Level 单词
             const levelSpan = document.createElement('span');
             levelSpan.style.color = levelColor;
             levelSpan.style.fontWeight = 'bold';
             levelSpan.textContent = levelWord;
             lineContainer.appendChild(levelSpan);
 
-            // 3. 拼接后缀标点 (如 "]: ")
             if (postPunctuation) lineContainer.appendChild(document.createTextNode(postPunctuation));
-            
-            // 4. 拼接后续依然绿色的正常日志内容
             lineContainer.appendChild(document.createTextNode(restOfMsg));
         } else {
-            // 如果不含任何 Level 标签，检查是否带感叹号强制标红，否则全局纯绿
             if (msg.trim().startsWith('!')) {
                 const errSpan = document.createElement('span');
                 errSpan.style.color = '#ff3333';
@@ -274,24 +327,216 @@
         terminal.scrollTop = terminal.scrollHeight;
     }
 
+    function resetResultArea() {
+        resultArea.className = "";
+        downloadLink.classList.remove('active');
+        downloadLink.removeAttribute('href');
+    }
+
+    function applyTerminalStatus(taskId, statusType, options = {}) {
+        const hasResult = options.hasResult !== false;
+        const downloadUrl = options.downloadUrl || `/api/download/${taskId}`;
+
+        resultArea.className = `status-${statusType.toLowerCase()}`;
+
+        if (statusType === "SUCCESS") {
+            resultMsg.textContent = "COMPUTATION COMPLETE - All results generated successfully.";
+            if (!options.silentLog) logToTerminal("INFO: Process finished with exit code 0.");
+        } else if (statusType === "PARTIAL") {
+            resultMsg.textContent = "PARTIAL SUCCESS - Some modules failed. Review logs for warnings.";
+            if (!options.silentLog) logToTerminal("WARNING: Process finished with partial errors. See debug logs.");
+        } else if (statusType === "ERROR") {
+            resultMsg.textContent = "FATAL ERROR - Computation failed. Download logs for details.";
+            if (!options.silentLog) logToTerminal("FATAL: Process aborted. See debug_error.log.");
+        } else {
+            resultArea.className = "status-error";
+            resultMsg.textContent = "TASK NOT FOUND - The task may have expired or never reached the queue.";
+            if (!options.silentLog) logToTerminal("WARNING: Task not found or expired on the server.");
+        }
+
+        if (hasResult && statusType !== "NOT_FOUND") {
+            downloadLink.href = downloadUrl;
+            downloadLink.classList.add('active');
+        } else {
+            downloadLink.classList.remove('active');
+            downloadLink.removeAttribute('href');
+        }
+
+        if (activeEventSource) {
+            activeEventSource.close();
+            activeEventSource = null;
+        }
+
+        activeTaskId = null;
+        submitBtn.disabled = false;
+        markStoredTaskFinal(taskId, statusType);
+    }
+
+    function applyNonTerminalStatus(taskId, statusType) {
+        activeTaskId = taskId;
+        submitBtn.disabled = true;
+        resetResultArea();
+
+        if (statusType === "QUEUED") {
+            resultMsg.textContent = "[PROCESSING] Task is queued. Waiting for compute node...";
+            logToTerminal(`INFO: Recovered task ${taskId}. Current state: QUEUED.`);
+        } else {
+            resultMsg.textContent = "[PROCESSING] Task is running. Reconnecting to live logs...";
+            logToTerminal(`INFO: Recovered task ${taskId}. Current state: RUNNING.`);
+        }
+
+        connectLogStream(taskId);
+    }
+
+    async function queryTaskStatus(taskId, options = {}) {
+        const response = await fetch(`/api/task_status/${encodeURIComponent(taskId)}`, {
+            method: "GET",
+            cache: "no-store"
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const payload = await response.json();
+        const state = payload.task_state || "UNKNOWN";
+
+        if (TERMINAL_STATES.has(state)) {
+            if (state === "NOT_FOUND" && options.deferNotFound === true) {
+                saveStoredTask({
+                    taskId,
+                    state: options.keepState || "SUBMITTING",
+                    terminal: false,
+                    checked: false,
+                    createdAt: options.createdAt || Date.now(),
+                    lastNotFoundAt: Date.now()
+                });
+                if (!options.silentLog) {
+                    logToTerminal("INFO: Task is not visible on the server yet. Keeping the saved id for another check.");
+                }
+                return payload;
+            }
+
+            applyTerminalStatus(taskId, state, {
+                hasResult: payload.has_result,
+                downloadUrl: payload.download_url,
+                silentLog: options.silentLog
+            });
+        } else if (state === "QUEUED" || state === "RUNNING") {
+            saveStoredTask({
+                taskId,
+                state,
+                terminal: false,
+                checked: false,
+                createdAt: options.createdAt || Date.now()
+            });
+            if (options.resumeStream !== false) {
+                applyNonTerminalStatus(taskId, state);
+            }
+        } else {
+            logToTerminal(`WARNING: Server returned unknown task state: ${state}.`);
+        }
+
+        return payload;
+    }
+
+    async function recoverStoredTask(reason = "startup") {
+        if (recoveryInFlight) return;
+        clearStoredTaskIfExpired();
+
+        const stored = getStoredTask();
+        if (!stored || stored.checked === true || stored.terminal === true) return;
+
+        recoveryInFlight = true;
+        try {
+            logToTerminal(`INFO: Checking saved task ${stored.taskId} after ${reason}.`);
+            await queryTaskStatus(stored.taskId, {
+                createdAt: stored.createdAt,
+                resumeStream: true
+            });
+        } catch (err) {
+            logToTerminal(`WARNING: Could not check saved task status yet: ${err}.`);
+            saveStoredTask({
+                ...stored,
+                lastCheckFailed: true
+            });
+        } finally {
+            recoveryInFlight = false;
+        }
+    }
+
+    function connectLogStream(taskId) {
+        if (activeEventSource) {
+            activeEventSource.close();
+            activeEventSource = null;
+        }
+
+        activeTaskId = taskId;
+        activeEventSource = new EventSource(`/api/stream_logs/${encodeURIComponent(taskId)}`);
+
+        activeEventSource.onmessage = function(event) {
+            if (event.data.startsWith("[[DONE_")) {
+                const statusType = event.data.replace("[[DONE_", "").replace("]]", "");
+                applyTerminalStatus(taskId, statusType);
+            } else {
+                logToTerminal(event.data);
+            }
+        };
+
+        activeEventSource.onerror = () => {
+            logToTerminal("WARNING: SSE stream interrupted. Task id is saved locally.");
+            if (activeEventSource) {
+                activeEventSource.close();
+                activeEventSource = null;
+            }
+
+            resultArea.className = "";
+            resultMsg.textContent = "[SYSTEM ALERT] Connection lost. Task status will be checked again when possible.";
+            submitBtn.disabled = false;
+
+            const stored = getStoredTask();
+            if (stored && stored.taskId === taskId) {
+                saveStoredTask({
+                    ...stored,
+                    state: stored.state || "RUNNING",
+                    terminal: false,
+                    checked: false,
+                    lastStreamErrorAt: Date.now()
+                });
+            }
+
+            if (navigator.onLine) {
+                setTimeout(() => {
+                    queryTaskStatus(taskId, { resumeStream: true }).catch(err => {
+                        logToTerminal(`WARNING: Status retry failed: ${err}.`);
+                    });
+                }, 2000);
+            }
+        };
+    }
+
     function processFiles(fileList) {
         Array.from(fileList).forEach(file => {
             const name = file.name.toLowerCase();
             if (name.endsWith('.pdb') || name.endsWith('.sdf')) {
                 stateFiles.mol = file;
                 molDisplay.textContent = file.name;
-                logToTerminal(`INFO: Memory loaded ${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`);
+                logToTerminal(`INFO: Memory loaded ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB).`);
             } else {
-                logToTerminal(`WARN: Ignored unknown file type - ${file.name}`);
+                logToTerminal(`WARN: Ignored unsupported file type: ${file.name}.`);
             }
         });
     }
 
     dropzone.addEventListener('click', () => fileInput.click());
-    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+    dropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropzone.classList.add('dragover');
+    });
     dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
     dropzone.addEventListener('drop', (e) => {
-        e.preventDefault(); dropzone.classList.remove('dragover');
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
         processFiles(e.dataTransfer.files);
     });
     fileInput.addEventListener('change', (e) => processFiles(e.target.files));
@@ -303,7 +548,6 @@
 
             const time = new Date().toTimeString().split(' ')[0];
 
-            // 传输进度的提示保持全行绿色，内部方块为青蓝
             const prefixSpan = document.createElement('span');
             prefixSpan.style.color = '#00ff00';
             prefixSpan.textContent = `\n[${time}] DATA_TRANSFER: `;
@@ -330,7 +574,9 @@
                     progressSpan.style.color = '#00ff00';
                     try {
                         resolve(JSON.parse(xhr.responseText));
-                    } catch(err) { reject("JSON Parse Error"); }
+                    } catch (err) {
+                        reject("JSON parse error");
+                    }
                 } else {
                     progressSpan.textContent = `[SERVER_REJECTED]`;
                     progressSpan.style.color = '#ff3333';
@@ -341,28 +587,78 @@
             xhr.onerror = () => {
                 progressSpan.textContent = `[NETWORK_LINK_DEAD]`;
                 progressSpan.style.color = '#ff3333';
-                reject("Connection to VPS lost");
+                reject("Connection to server lost");
             };
 
             xhr.send(formData);
         });
     }
 
-    document.getElementById('submitBtn').addEventListener('click', async () => {
+
+    function probeTaskAfterUnconfirmedUpload(taskId, createdAt, attempt = 1) {
+        const maxAttempts = 3;
+        const delayMs = attempt === 1 ? 2000 : 5000;
+
+        setTimeout(() => {
+            queryTaskStatus(taskId, {
+                createdAt,
+                resumeStream: true,
+                deferNotFound: attempt < maxAttempts,
+                keepState: "SUBMITTING"
+            }).then(payload => {
+                if (payload.task_state === "NOT_FOUND" && attempt < maxAttempts) {
+                    probeTaskAfterUnconfirmedUpload(taskId, createdAt, attempt + 1);
+                }
+            }).catch(err => {
+                logToTerminal(`WARNING: Delayed task status check failed: ${err}.`);
+                const stored = getStoredTask();
+                if (stored && stored.taskId === taskId) {
+                    saveStoredTask({
+                        ...stored,
+                        state: "SUBMITTING",
+                        terminal: false,
+                        checked: false,
+                        lastCheckFailed: true
+                    });
+                }
+            });
+        }, delayMs);
+    }
+
+    submitBtn.addEventListener('click', async () => {
         if (!stateFiles.mol) {
-            showModal("Missing Input: You must provide at least one .PDB or .SDF file to proceed.", true);
+            showModal("Missing input: provide at least one .PDB or .SDF file to proceed.", true);
             return;
         }
 
-        document.getElementById('submitBtn').disabled = true;
-        resultArea.className = "";
-        downloadLink.classList.remove('active');
+        let taskId;
+        try {
+            taskId = generateTaskId();
+        } catch (err) {
+            showModal(String(err), true);
+            return;
+        }
+
+        const createdAt = Date.now();
+        saveStoredTask({
+            taskId,
+            state: "SUBMITTING",
+            terminal: false,
+            checked: false,
+            createdAt
+        });
+        activeTaskId = taskId;
+
+        submitBtn.disabled = true;
+        resetResultArea();
         resultMsg.textContent = "[PROCESSING] Uploading payload to remote cluster...";
 
         logToTerminal("=========================================");
-        logToTerminal("INFO: INITIATING P2P UPLOAD SEQUENCE...");
+        logToTerminal("INFO: INITIATING UPLOAD SEQUENCE...");
+        logToTerminal(`INFO: Client task id ${taskId} saved locally before upload.`);
 
         const formData = new FormData();
+        formData.append('task_id', taskId);
         formData.append('files', stateFiles.mol);
 
         const chargeVal = parseFloat(document.getElementById('chargeFactor').value);
@@ -378,56 +674,69 @@
 
         try {
             const data = await uploadWithProgress(formData);
-            if (data.status !== 'success') throw new Error(data.error);
+            if (data.status !== 'success') throw new Error(data.error || "Upload rejected by server");
+
+            const confirmedTaskId = data.task_id || taskId;
+            if (confirmedTaskId !== taskId) {
+                logToTerminal(`WARNING: Server returned a different task id: ${confirmedTaskId}. Using server id for recovery.`);
+            }
+
+            saveStoredTask({
+                taskId: confirmedTaskId,
+                state: data.task_state || "QUEUED",
+                terminal: false,
+                checked: false,
+                createdAt
+            });
 
             resultMsg.textContent = "[PROCESSING] Data received. Awaiting computation logs...";
+            logToTerminal(`INFO: Task id ${confirmedTaskId} confirmed by server.`);
             logToTerminal("INFO: WAITING FOR COMPUTE NODE...");
 
-            const taskId = data.task_id;
-            const evtSource = new EventSource(`/api/stream_logs/${taskId}`);
-
-            evtSource.onmessage = function(event) {
-                if (event.data.startsWith("[[DONE_")) {
-                    evtSource.close();
-
-                    const statusType = event.data.replace("[[DONE_", "").replace("]]", "");
-                    resultArea.className = `status-${statusType.toLowerCase()}`;
-
-                    if (statusType === "SUCCESS") {
-                        resultMsg.textContent = "COMPUTATION COMPLETE - All results generated successfully.";
-                        logToTerminal("INFO: Process finished with exit code 0.");
-                    } else if (statusType === "PARTIAL") {
-                        resultMsg.textContent = "PARTIAL SUCCESS - Some modules failed. Review logs for warnings.";
-                        logToTerminal("WARNING: Process finished with partial errors. See debug logs.");
-                    } else {
-                        resultMsg.textContent = "FATAL ERROR - Computation failed. Download logs for details.";
-                        logToTerminal("FATAL: Process aborted. See debug_error.log.");
-                    }
-
-                    downloadLink.href = `/api/download/${taskId}`;
-                    downloadLink.classList.add('active');
-                    document.getElementById('submitBtn').disabled = false;
-                } else {
-                    logToTerminal(event.data);
-                }
-            };
-
-            evtSource.onerror = () => {
-                logToTerminal("FATAL: SSE Stream Interrupted. Connection lost.");
-                evtSource.close();
-                document.getElementById('submitBtn').disabled = false;
-                resultArea.className = "";
-                resultMsg.textContent = "[SYSTEM ALERT] Connection lost.";
-            };
+            connectLogStream(confirmedTaskId);
 
         } catch (err) {
-            logToTerminal(`FATAL: UPLOAD ABORTED - ${err}`);
-            showModal("Network communication failed during upload.", true);
-            document.getElementById('submitBtn').disabled = false;
+            logToTerminal(`WARNING: Upload did not return a confirmed response: ${err}`);
+            logToTerminal(`INFO: The saved task id ${taskId} will be checked automatically.`);
+            showModal("Upload confirmation was interrupted. The saved task id will be checked automatically when the server is reachable.", false);
+            submitBtn.disabled = false;
             resultArea.className = "";
-            resultMsg.textContent = "[SYSTEM ALERT] Network Exception.";
+            resultMsg.textContent = "[SYSTEM ALERT] Upload confirmation interrupted. Saved task id will be checked.";
+
+            const stored = getStoredTask();
+            if (stored && stored.taskId === taskId) {
+                saveStoredTask({
+                    ...stored,
+                    state: "SUBMITTING",
+                    terminal: false,
+                    checked: false,
+                    lastUploadErrorAt: Date.now()
+                });
+            }
+
+            if (navigator.onLine) {
+                probeTaskAfterUnconfirmedUpload(taskId, createdAt);
+            }
         }
     });
+
+    window.addEventListener('online', () => {
+        logToTerminal("INFO: Browser reports network link restored.");
+        recoverStoredTask("network restore");
+    });
+
+    window.addEventListener('offline', () => {
+        logToTerminal("WARNING: Browser reports network link lost. Active task id remains saved locally.");
+    });
+
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            recoverStoredTask("page focus");
+        }
+    });
+
+    clearStoredTaskIfExpired();
+    recoverStoredTask("page load");
 </script>
 </body>
 </html>
