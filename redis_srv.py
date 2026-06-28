@@ -3,6 +3,7 @@ import os
 import shutil
 import uuid
 from typing import List
+import asyncio
 
 import redis.asyncio as aioredis
 from fastapi import FastAPI, UploadFile, File, Form
@@ -70,15 +71,30 @@ async def stream_logs(task_id: str):
         await pubsub.subscribe(channel_name)
 
         try:
-            async for message in pubsub.listen():
-                if message['type'] == 'message':
+            status = await redis_client.get(f"task_status_{task_id}")
+            if status:
+                yield {"data": f"[[DONE_{status}]]"}
+                return
+            
+            while True:
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=15.0)
+
+                if message is not None:
                     data = message['data']
                     yield {"data": data}
-
                     if data.startswith("[[DONE_"):
                         break
+                else:
+                    yield {"event": "ping", "data": "keepalive"}
+
+        except asyncio.CancelledError:
+            pass
         finally:
-            await pubsub.unsubscribe(channel_name)
+            try:
+                await pubsub.unsubscribe(channel_name)
+                await pubsub.close()
+            except Exception:
+                pass
 
     return EventSourceResponse(event_generator())
 

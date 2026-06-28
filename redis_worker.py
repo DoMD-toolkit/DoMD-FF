@@ -4,9 +4,12 @@ import logging
 import os
 import traceback
 import zipfile
+import time
 
 import redis
 from rdkit.Chem import rdMolHash
+import redis
+from redis.exceptions import RedisError, TimeoutError, ConnectionError
 
 from ForceField import FF
 from misc.io.gmx import write_gro_file, write_top_file, write_list_itp_files
@@ -14,7 +17,13 @@ from misc.logger import task_file_log_scope, mol_file_log_scope
 from misc.parser import molecule_reader, molecule_reader_list
 
 WORKSPACE_BASE = "./workspaces"
-redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
+redis_client = redis.Redis(
+    host='localhost',
+    port=6379,
+    decode_responses=True,
+    health_check_interval=30 # 每 30 秒自动发一个 ping，保持连接鲜活
+)
+
 
 
 def setup_worker_logger(task_id: str):
@@ -162,32 +171,38 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
         except Exception as e:
             compute_status = "ERROR"
             web_logger.error(f"Error: {str(e)}")
-            web_logger.error(traceback.format_exc())
+            # web_logger.error(traceback.format_exc())  # hide further info
 
             with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 zipf.write(debug_log_path, arcname="debug_error.log")
-
+    redis_client.set(f"task_status_{task_id}", compute_status, ex=86400)
     redis_client.publish(f"log_channel_{task_id}", f"[[DONE_{compute_status}]]")
+    web_logger.handlers.clear()
+
 
 
 def main():
     print("[SYSTEM] Worker Node Online. Waiting for tasks from Redis...")
     while True:
         try:
-            queue_name, message = redis_client.blpop('md_task_queue', 0)
-            task_data = json.loads(message)
+            result = redis_client.blpop('md_task_queue', timeout=5)
+            if result is None:
+                continue
 
+            queue_name, message = result
+            task_data = json.loads(message)
             task_id = task_data['task_id']
-            file_paths = task_data['file_paths']
-            params = task_data['params']
-            work_dir = task_data['work_dir']
 
             print(f"[SYSTEM] Task {task_id} received. Executing...")
-            run_heavy_compute(task_id, file_paths, params, work_dir)
+            run_heavy_compute(task_id, task_data['file_paths'], task_data['params'], task_data['work_dir'])
             print(f"[SYSTEM] Task {task_id} completed.")
 
+        except (TimeoutError, ConnectionError, RedisError) as e:
+            print(f"[INFO] Network jitter detected, auto-reconnecting... ({e})")
+            time.sleep(1)
         except Exception as e:
-            print(f"[FATAL] Worker loop error: {e}")
+            print(f"[ERROR] Real worker error: {e}")
+            time.sleep(2)
 
 
 if __name__ == "__main__":
