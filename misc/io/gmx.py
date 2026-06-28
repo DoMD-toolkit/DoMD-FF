@@ -138,7 +138,7 @@ def write_top_file(output_path, ff, res_names=None, res_ids=None):
         f.write("; name   bond_type     mass       charge   ptype          sigma        epsilon\n")
         for a_type, o_atom in unique_atomtypes.items():
             f.write(
-                f"  {a_type:<8} {o_atom.bond_type:<8} {o_atom.mass:>10.4f} {o_atom.charge:>8.4f} {o_atom.ptype:<3} {o_atom.sigma:>14.6e} {o_atom.epsilon:>14.6e}\n")
+                f"  {a_type:<8} {o_atom.bond_type:<8} {o_atom.mass:>10.4f} {o_atom.charge:>12.6f} {o_atom.ptype:<3} {o_atom.sigma:>14.6e} {o_atom.epsilon:>14.6e}\n")
         f.write("\n")
 
         f.write("[ moleculetype ]\n")
@@ -155,7 +155,7 @@ def write_top_file(output_path, ff, res_names=None, res_ids=None):
             r_name = str(r_name)[:5]
             a_name = f"{o_atom.element}"
             f.write(
-                f"{atom_idx:>6} {atomidx2atomtype[i]:>10} {r_num:>6} {r_name:>6} {a_name:>6} {atom_idx:>6} {a_charge:>10.4f} {o_atom.mass:>10.4f}\n")
+                f"{atom_idx:>6} {atomidx2atomtype[i]:>10} {r_num:>6} {r_name:>6} {a_name:>6} {atom_idx:>6} {a_charge:>12.6f} {o_atom.mass:>10.4f}\n")
         f.write("\n")
 
         if bonds_list:
@@ -262,7 +262,7 @@ def write_itp_file(output_path, ff, res_names=None, res_ids=None, mol_name="MOL"
             f.write("; name   bond_type     mass       charge   ptype          sigma        epsilon\n")
             for a_type, o_atom in unique_atomtypes.items():
                 f.write(
-                    f"  {a_type:<8} {o_atom.bond_type:<8} {o_atom.mass:>10.4f} {o_atom.charge:>8.4f} {o_atom.ptype:<3} {o_atom.sigma:>14.6e} {o_atom.epsilon:>14.6e}\n")
+                    f"  {a_type:<8} {o_atom.bond_type:<8} {o_atom.mass:>10.4f} {o_atom.charge:>12.6f} {o_atom.ptype:<3} {o_atom.sigma:>14.6e} {o_atom.epsilon:>14.6e}\n")
             f.write("\n")
 
         f.write("[ moleculetype ]\n")
@@ -278,7 +278,7 @@ def write_itp_file(output_path, ff, res_names=None, res_ids=None, mol_name="MOL"
             r_name = str(r_name)[:5]
             a_name = f"{o_atom.element}"
             f.write(
-                f"{atom_idx:>6} {atomidx2atomtype[i]:>10} {r_num:>6} {r_name:>6} {a_name:>6} {atom_idx:>6} {a_charge:>10.4f} {o_atom.mass:>10.4f}\n")
+                f"{atom_idx:>6} {atomidx2atomtype[i]:>10} {r_num:>6} {r_name:>6} {a_name:>6} {atom_idx:>6} {a_charge:>12.6f} {o_atom.mass:>10.4f}\n")
         f.write("\n")
 
         # --- [ bonds ] 块 ---
@@ -349,7 +349,7 @@ def write_atomtypes_head(output_path, unique_atomtypes, write_defaults=False):
         f.write("; name   bond_type     mass       charge   ptype          sigma        epsilon\n")
         for a_type, o_atom in unique_atomtypes.items():
             f.write(
-                f"  {a_type:<8} {o_atom.bond_type:<8} {o_atom.mass:>10.4f} {o_atom.charge:>8.4f} {o_atom.ptype:<3} {o_atom.sigma:>14.6e} {o_atom.epsilon:>14.6e}\n")
+                f"  {a_type:<8} {o_atom.bond_type:<8} {o_atom.mass:>10.4f} {o_atom.charge:>12.6f} {o_atom.ptype:<3} {o_atom.sigma:>14.6e} {o_atom.epsilon:>14.6e}\n")
         f.write("\n")
 
 
