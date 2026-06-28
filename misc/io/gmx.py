@@ -148,8 +148,10 @@ def write_top_file(output_path, ff, res_names=None, res_ids=None):
         f.write("[ atoms ]\n")
         f.write(";   nr       type  resnr residue  atom   cgnr     charge       mass\n")
 
-        for i, o_atom, r_num, r_name, a_charge in zip(range(len(res_ids)), params_atom, res_ids, res_names, charges):
+        for i, r_num, r_name in zip(range(len(res_ids)), res_ids, res_names):
             atom_idx = i + 1
+            o_atom = params_atom[i]
+            a_charge = charges[i]
             r_name = str(r_name)[:5]
             a_name = f"{o_atom.element}"
             f.write(
