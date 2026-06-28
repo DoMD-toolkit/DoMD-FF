@@ -13,7 +13,7 @@ REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 RETENTION_SECONDS = int(os.getenv("TASK_TTL_SECONDS", "86400"))
 GRACE_SECONDS = int(os.getenv("CLEANUP_GRACE_SECONDS", "3600"))
 
-DRY_RUN = "1" #os.getenv("DRY_RUN", "0") == "1"
+DRY_RUN = os.getenv("DRY_RUN", "0") == "1"
 
 TASK_DIR_RE = re.compile(r"^task_[a-f0-9]{8}([a-f0-9]{24})?$")
 TASK_ZIP_RE = re.compile(r"^(task_[a-f0-9]{8}([a-f0-9]{24})?)_result\.zip$")
