@@ -23,8 +23,7 @@ TASK_TTL_SECONDS = int(os.getenv("TASK_TTL_SECONDS", "86400"))
 REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 
-TASK_ID_RE = re.compile(r"^task_[a-f0-9]{8}(?:[a-f0-9]{24})?$")
-CLIENT_TASK_ID_RE = re.compile(r"^task_[a-f0-9]{32}$")
+TASK_ID_RE = re.compile(r"^task_[a-f0-9]{32}$")
 TERMINAL_STATES = {"SUCCESS", "PARTIAL", "ERROR"}
 
 os.makedirs(WORKSPACE_BASE, exist_ok=True)
@@ -49,7 +48,6 @@ def make_task_id() -> str:
 
 
 def is_valid_task_id(task_id: str) -> bool:
-    # Status/download/SSE stay backward-compatible with old 8-hex server-generated ids.
     return bool(TASK_ID_RE.fullmatch(task_id or ""))
 
 
@@ -58,7 +56,7 @@ def normalize_upload_task_id(task_id: Optional[str]) -> str:
         return make_task_id()
 
     normalized = str(task_id).strip().lower()
-    if not CLIENT_TASK_ID_RE.fullmatch(normalized):
+    if not TASK_ID_RE.fullmatch(normalized):
         raise HTTPException(
             status_code=400,
             detail="Invalid task_id format. Expected task_<32 lowercase hex characters>.",
@@ -74,17 +72,12 @@ def task_meta_key(task_id: str) -> str:
     return f"task_meta_{task_id}"
 
 
-def task_status_key(task_id: str) -> str:
-    # This key stores terminal states only, for backward compatibility with SSE.
-    return f"task_status_{task_id}"
-
-
 def result_zip_path(task_id: str) -> str:
     return os.path.join(WORKSPACE_BASE, f"{task_id}_result.zip")
 
 
 def local_status_path(task_id: str) -> str:
-    return os.path.join(WORKSPACE_BASE, task_id, "task_status.json")
+    return os.path.join(WORKSPACE_BASE, task_id, "task_meta.json")
 
 
 def safe_upload_name(filename: Optional[str]) -> str:
@@ -180,21 +173,6 @@ async def get_task_status_payload(task_id: str) -> dict:
                 "expires_at": meta.get("expires_at"),
                 "expires_in": max(ttl, 0) if ttl is not None else None,
                 "source": "redis_meta",
-            }
-
-        terminal_state = await redis_client.get(task_status_key(task_id))
-        if terminal_state:
-            has_result = os.path.exists(result_zip_path(task_id))
-            return {
-                "status": "success",
-                "task_id": task_id,
-                "task_state": terminal_state,
-                "terminal": terminal_state in TERMINAL_STATES,
-                "has_result": has_result,
-                "download_url": f"/api/download/{task_id}" if has_result else None,
-                "message": f"Task finished with status {terminal_state}.",
-                "expires_in": max(await redis_client.ttl(task_status_key(task_id)), 0),
-                "source": "redis_terminal_status",
             }
 
     except RedisError:
@@ -326,7 +304,7 @@ async def upload_and_run(
     except RedisError as exc:
         shutil.rmtree(work_dir, ignore_errors=True)
         try:
-            await redis_client.delete(task_claim_key(task_id), task_meta_key(task_id), task_status_key(task_id))
+            await redis_client.delete(task_claim_key(task_id), task_meta_key(task_id))
         except RedisError:
             pass
         return {"status": "error", "error": f"Task queue unavailable: {exc}"}

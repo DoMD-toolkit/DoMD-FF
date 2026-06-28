@@ -45,17 +45,12 @@ def task_meta_key(task_id: str) -> str:
     return f"task_meta_{task_id}"
 
 
-def task_status_key(task_id: str) -> str:
-    # This key stores terminal states only, for backward compatibility with SSE.
-    return f"task_status_{task_id}"
-
-
 def result_zip_path(task_id: str) -> str:
     return os.path.join(WORKSPACE_BASE, f"{task_id}_result.zip")
 
 
 def local_status_path(work_dir: str) -> str:
-    return os.path.join(work_dir, "task_status.json")
+    return os.path.join(work_dir, "task_meta.json")
 
 
 def write_local_status(work_dir: str, meta: dict) -> None:
@@ -118,12 +113,6 @@ def publish_best_effort(channel: str, message: str) -> None:
 
 def finalize_task(task_id: str, state: str, work_dir: str, message: str) -> None:
     update_task_meta(task_id, state, message, work_dir, terminal=True)
-
-    try:
-        redis_client.set(task_status_key(task_id), state, ex=TASK_TTL_SECONDS)
-    except RedisError as exc:
-        print(f"[WARN] Could not write terminal Redis task status: {exc}", flush=True)
-
     publish_best_effort(f"log_channel_{task_id}", f"[[DONE_{state}]]")
 
 
