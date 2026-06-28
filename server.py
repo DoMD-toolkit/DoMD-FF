@@ -10,6 +10,7 @@ import zipfile
 from typing import List
 
 from fastapi import FastAPI, UploadFile, File, Form
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.responses import HTMLResponse
 from rdkit.Chem import rdMolHash
@@ -20,7 +21,8 @@ from misc.io.gmx import write_gro_file, write_top_file, write_list_itp_files
 from misc.logger import task_file_log_scope, mol_file_log_scope
 from misc.parser import molecule_reader, molecule_reader_list
 
-app = FastAPI(title="P2P FF parameterizer server")
+app = FastAPI(title="DoMD FF server")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 WORKSPACE_BASE = "./workspaces"
 os.makedirs(WORKSPACE_BASE, exist_ok=True)

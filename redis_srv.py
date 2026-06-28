@@ -6,10 +6,12 @@ from typing import List
 
 import redis.asyncio as aioredis
 from fastapi import FastAPI, UploadFile, File, Form
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from sse_starlette.sse import EventSourceResponse
 
-app = FastAPI(title="P2P FF parameterizer server")
+app = FastAPI(title="DoMD FF server")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 WORKSPACE_BASE = "./workspaces"
 os.makedirs(WORKSPACE_BASE, exist_ok=True)
