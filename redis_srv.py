@@ -75,7 +75,7 @@ async def stream_logs(task_id: str):
             if status:
                 yield {"data": f"[[DONE_{status}]]"}
                 return
-            
+
             while True:
                 message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=15.0)
 
