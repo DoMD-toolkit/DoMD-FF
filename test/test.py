@@ -9,8 +9,8 @@ if __name__ == '__main__':
     logger.propagate = True
 
     # obmol, rdmol, coordinates, res_names, res_ids, box_tensor = molecule_reader('test_data/test_system.pdb')
-    obmol, rdmol, coordinates, res_names, res_ids, box_tensor = molecule_reader('test_data/split_mols_fixed.sdf')
+    obmol, rdmol, coordinates, res_names, res_ids, box_tensor = molecule_reader('test_hybrid_system/test_spe_system.sdf')
     # obmol, rdmol, coordinates, res_names, res_ids, box_tensor = molecule_reader('test_data/sbr_optimized.pdb')
     forcefield = FF('opls')
-    forcefield.setup(rdmol, obmol, useGMX=True, useBOSS=True, overwrite=False, useML=True)
+    forcefield.setup(rdmol, obmol, useGMX=False, useBOSS=True, overwrite=False, useML=True)
     params_atom, params_bonded, params_improper = forcefield.params

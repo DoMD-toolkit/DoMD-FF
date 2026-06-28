@@ -21,9 +21,8 @@ redis_client = redis.Redis(
     host='localhost',
     port=6379,
     decode_responses=True,
-    health_check_interval=30 # 每 30 秒自动发一个 ping，保持连接鲜活
+    health_check_interval=30
 )
-
 
 
 def setup_worker_logger(task_id: str):

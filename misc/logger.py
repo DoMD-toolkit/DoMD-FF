@@ -41,14 +41,14 @@ logger = get_logger("task_logger")
 logger.setLevel(logging.DEBUG)
 logger.propagate = False
 
-if not any(isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler) for h in logger.handlers):
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.DEBUG)
-
-    formatter = logging.Formatter(logger_format)
-    console_handler.setFormatter(formatter)
-
-    logger.addHandler(console_handler)
+# if not any(isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler) for h in logger.handlers):
+#     console_handler = logging.StreamHandler(sys.stdout)
+#     console_handler.setLevel(logging.DEBUG)
+#
+#     formatter = logging.Formatter(logger_format)
+#     console_handler.setFormatter(formatter)
+#
+#     logger.addHandler(console_handler)
 
 
 @contextmanager
