@@ -29,7 +29,29 @@
         #terminal {
             font-family: "Courier New", monospace; font-size: 14px; padding: 10px;
             position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-            box-sizing: border-box; overflow-y: scroll; margin: 0; white-space: pre-wrap;
+            box-sizing: border-box; overflow-y: auto; margin: 0; white-space: pre-wrap;
+        }
+        #terminal {
+            scrollbar-width: thin;
+            scrollbar-color: #00ff00 #101010;
+        }
+
+        #terminal::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        #terminal::-webkit-scrollbar-track {
+            background: #101010;
+            border-left: 1px solid #003300;
+        }
+
+        #terminal::-webkit-scrollbar-thumb {
+            background: #008000;
+            border: 1px solid #00ff00;
+        }
+
+        #terminal::-webkit-scrollbar-thumb:hover {
+            background: #00aa00;
         }
 
         #dropzone {
@@ -59,7 +81,17 @@
             font-family: "Courier New", monospace; font-size: 14px;
             padding: 2px 5px; width: 50px; text-align: right;
         }
+        input[type="number"]::-webkit-outer-spin-button,
+            input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none !important;
+            margin: 0 !important;
+        }
 
+        /* 强制隐藏 Firefox 的箭头 */
+        input[type="number"] {
+            -moz-appearance: textfield !important;
+            appearance: none !important;
+        }
         #result-area {
             border-top: 2px solid #404040; border-left: 2px solid #404040;
             border-bottom: 2px solid #ffffff; border-right: 2px solid #ffffff;
@@ -146,7 +178,7 @@
 
             <span style="display: flex; align-items: center; gap: 5px;">
                 <label for="chargeFactor" style="font-weight: bold; color: #000080;">Charge Factor:</label>
-                <input class="retro-input" id="chargeFactor" step="0.1" style="margin:0;" type="number" value="1.0">
+                <input class="retro-input" id="chargeFactor" inputmode="decimal" type="text" value="1.0">
             </span>
         </div>
 
@@ -449,7 +481,7 @@
 
         recoveryInFlight = true;
         try {
-            logToTerminal(`INFO: Checking saved task ${stored.taskId} after ${reason}.`);
+            // logToTerminal(`INFO: Checking saved task ${stored.taskId} after ${reason}.`);
             await queryTaskStatus(stored.taskId, {
                 createdAt: stored.createdAt,
                 resumeStream: true
