@@ -80,8 +80,9 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
                     raise ValueError("Force field parameterization failed, please check the log files.")
 
                 # output
+                atom_names = [f"{atom.GetSymbol()}" for atom in rdmol.GetAtoms()]
                 web_logger.info("Writing GRO file...")
-                write_gro_file(output_gro_path, coordinates, res_names, res_ids, box_tensor)
+                write_gro_file(output_gro_path, coordinates, box_tensor, res_names, res_ids, atom_names)
                 web_logger.info("Writing TOP file...")
                 write_top_file(output_top_path, forcefield, res_names, res_ids)
 

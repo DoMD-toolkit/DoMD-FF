@@ -29,7 +29,7 @@ class FF(object):
             self.params, self._missing, self.success = opls_setup(rdmol, obmol, **kwargs)
             if self.success:
                 for idx in self.params[0]:
-                    charge_drift += self.params[0][idx].charge
+                    charge_drift += float(self.params[0][idx].charge)
                     atom_count += 1
                 logger.info(f"OPLS total charge for {rdmol}: {charge_drift:.4f}")
                 charge_drift /= atom_count

@@ -30,7 +30,7 @@ def map_unique_atomtypes(params_atom):
     return unique_atomtypes, atomidx2atomtypes
 
 
-def write_gro_file(output_path, coordinates, box_tensor, res_names=None, res_ids=None, atom_names=[]):
+def write_gro_file(output_path, coordinates, box_tensor, res_names=None, res_ids=None, atom_names=None):
     """
     :: params:
         coordinates: Nx3 (unit A)
@@ -44,11 +44,13 @@ def write_gro_file(output_path, coordinates, box_tensor, res_names=None, res_ids
         res_ids = [0] * num_atoms
     if res_names is None:
         res_names = ['UNL'] * num_atoms
+    if atom_names is None:
+        atom_names = [f'A{(i + 1) % 100000}' for i in range(num_atoms)]
 
     # box_tensor : v1(x) v2(y) v3(z) v1(y) v1(z) v2(x) v2(z) v3(x) v3(y)
     if len(box_tensor) < 9:
         box_tensor = list(box_tensor) + [0.0] * (9 - len(box_tensor))
-    tensor_nm = [x / 10.0 for x in box_tensor]
+    tensor_nm = [float(x) / 10.0 for x in box_tensor]
 
     # 判断是否为标准正交盒子 (非对角线元素极小)
     is_orthogonal = (
@@ -75,11 +77,11 @@ def write_gro_file(output_path, coordinates, box_tensor, res_names=None, res_ids
             atom_id_safe = (i + 1) % 100000
 
             r_name = str(r_name)[:5]
-            a_name = a_name[:5] if i < len(atom_names) else f"A{i + 1}"[:5]
+            a_name = a_name[:5]
 
-            x_nm = x / 10.0
-            y_nm = y / 10.0
-            z_nm = z / 10.0
+            x_nm = float(x) / 10.0
+            y_nm = float(y) / 10.0
+            z_nm = float(z) / 10.0
 
             f.write(f"{res_id_safe:5d}{r_name:<5}{a_name:>5}{atom_id_safe:5d}{x_nm:8.3f}{y_nm:8.3f}{z_nm:8.3f}\n")
         f.write(box_line)
@@ -267,10 +269,10 @@ def write_itp_file(output_path, ff, res_names=None, res_ids=None, mol_name="MOL"
 
         f.write("[ atoms ]\n")
         f.write(";   nr       type  resnr residue  atom   cgnr     charge       mass\n")
-        for i, o_atom, r_num, r_name, a_charge in zip(range(len(res_ids)),
-                                                      params_atom, res_ids,
-                                                      res_names, charges):
+        for i, r_num, r_name in zip(range(len(res_ids)), res_ids, res_names):
             atom_idx = i + 1
+            a_charge = charges[i]
+            o_atom = params_atom[i]
             r_name = str(r_name)[:5]
             a_name = f"{o_atom.element}"
             f.write(
