@@ -38,7 +38,7 @@ class DuplicateFilter:
 
 
 logger = get_logger("task_logger")
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 logger.propagate = False
 
 # if not any(isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler) for h in logger.handlers):
@@ -57,7 +57,7 @@ def task_file_log_scope(task_name, log_dir):
     debug_log_path = os.path.join(log_dir, f"{task_name}_debug.log")
 
     handler = logging.FileHandler(debug_log_path, encoding='utf-8')
-    handler.setLevel(logging.DEBUG)
+    handler.setLevel(logging.INFO)
     formatter = logging.Formatter(logger_format)
     handler.setFormatter(formatter)
 
@@ -78,7 +78,7 @@ def mol_file_log_scope(idx, log_dir):
     mol_log_path = os.path.join(log_dir, f"MOL_{idx:06d}.log")
 
     handler = logging.FileHandler(mol_log_path, encoding='utf-8')
-    handler.setLevel(logging.DEBUG)
+    handler.setLevel(logging.INFO)
     formatter = logging.Formatter(logger_format)  # 使用你原有的 formatter
     handler.setFormatter(formatter)
 

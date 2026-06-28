@@ -185,7 +185,7 @@ def match_atom_by_boss_db(rdmol: Chem.Mol, hashes: dict, database, cache: dict, 
         else:
             ret_atom = False
             missing.add(atom.GetIdx())
-            logger.debug(f"{atom.GetIdx()}: {atom.GetSymbol()}, *{atom_stat[-1]} not found in database")
+            logger.info(f"{atom.GetIdx()}: {atom.GetSymbol()}, *{atom_stat[-1]} not found in database")
         cache[hash_str] = copy.deepcopy(ret_atom)
     return params, missing
 
@@ -252,7 +252,7 @@ def match_bonded_by_boss_db(rdmol: Chem.Mol, hashes: dict, database, cache_bd,
             else:
                 missing.add((bi, bj))
                 ret = False
-                logger.debug(f"{(bi, bj)}: {bond.GetBeginAtom().GetSymbol()}-{bond.GetEndAtom().GetSymbol()} "
+                logger.info(f"{(bi, bj)}: {bond.GetBeginAtom().GetSymbol()}-{bond.GetEndAtom().GetSymbol()} "
                              f"not found in database")
             cache_bd[hash_str] = copy.deepcopy(ret)
 
@@ -296,7 +296,7 @@ def match_bonded_by_boss_db(rdmol: Chem.Mol, hashes: dict, database, cache_bd,
             else:
                 ret = False
                 missing.add(angle)
-                logger.debug(f"{angle}: {rdmol.GetAtomWithIdx(ai).GetSymbol()}-{rdmol.GetAtomWithIdx(aj).GetSymbol()}-"
+                logger.info(f"{angle}: {rdmol.GetAtomWithIdx(ai).GetSymbol()}-{rdmol.GetAtomWithIdx(aj).GetSymbol()}-"
                              f"{rdmol.GetAtomWithIdx(ak).GetSymbol()} "
                              f"not found in database")
             cache_ang[hash_str] = copy.deepcopy(ret)
@@ -351,7 +351,7 @@ def match_bonded_by_boss_db(rdmol: Chem.Mol, hashes: dict, database, cache_bd,
             else:
                 ret = False
                 missing.add(dihedral)
-                logger.debug(
+                logger.info(
                     f"{dihedral}: {rdmol.GetAtomWithIdx(ai).GetSymbol()}-{rdmol.GetAtomWithIdx(aj).GetSymbol()}-"
                     f"{rdmol.GetAtomWithIdx(ak).GetSymbol()}-{rdmol.GetAtomWithIdx(al).GetSymbol()} "
                     f"not found in database")
@@ -396,7 +396,7 @@ def match_bonded_by_boss_db(rdmol: Chem.Mol, hashes: dict, database, cache_bd,
         else:
             ret = False
             missing_i.add(improper)
-            logger.debug(
+            logger.info(
                 f"Improper {improper}: {rdmol.GetAtomWithIdx(ai).GetSymbol()}-{rdmol.GetAtomWithIdx(aj).GetSymbol()}-"
                 f"{rdmol.GetAtomWithIdx(ak).GetSymbol()}-{rdmol.GetAtomWithIdx(al).GetSymbol()} "
                 f"not found in database")
@@ -488,7 +488,7 @@ def match_bonded_by_gmx_rule(params_atoms, bond_idx, angle_idx, dihedral_idx):
             params[(bi, bj)] = OPLSBond(indices=(bi, bj), k=rule.k, r0=rule.r0, ftype=rule.ftype)
             logger.debug(f"Found {rule.atom_types} for {(bi, bj)}")
         else:
-            logger.debug(f"Cant find bond {oi.bond_type}-{oj.bond_type}")
+            logger.info(f"Cant find bond {oi.bond_type}-{oj.bond_type}")
             missing.add((bi, bj))
 
     for angle in angle_idx:
@@ -509,7 +509,7 @@ def match_bonded_by_gmx_rule(params_atoms, bond_idx, angle_idx, dihedral_idx):
             logger.debug(f"Found {rule.atom_types} for {(ai, aj, ak)}")
         else:
             missing.add((ai, aj, ak))
-            logger.debug(f"Cant find angle {oi.bond_type}-{oj.bond_type}-{ok.bond_type}")
+            logger.info(f"Cant find angle {oi.bond_type}-{oj.bond_type}-{ok.bond_type}")
 
     for dihedral in dihedral_idx:
         ai, aj, ak, al = dihedral
@@ -571,7 +571,7 @@ def match_bonded_by_gmx_rule(params_atoms, bond_idx, angle_idx, dihedral_idx):
             logger.debug(f"Mathing rule with {rule.atom_types} for dihedral {dihedral},"
                          f"{oi.bond_type}-{oj.bond_type}-{ok.bond_type}-{ol.bond_type}")
         else:
-            logger.debug(f"Cant find dihedral {oi.bond_type}-{oj.bond_type}-{ok.bond_type}-{ol.bond_type}")
+            logger.info(f"Cant find dihedral {oi.bond_type}-{oj.bond_type}-{ok.bond_type}-{ol.bond_type}")
             missing.add((ai, aj, ak, al))
     return params, missing
 
@@ -632,7 +632,7 @@ def match_improper_by_gmx_rule(params_atoms, improper_idx):
 
         if not ret:
             missing.add(improper)
-            logger.debug(f"Mathing improper for"
+            logger.info(f"Mathing improper for"
                          f"{improper}: {oi.bond_type}-{oj.bond_type}-{ok.bond_type}-{ol.bond_type} failed.")
         else:
             params[ret.indices] = ret
