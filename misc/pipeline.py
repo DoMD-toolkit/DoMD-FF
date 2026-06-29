@@ -113,7 +113,7 @@ def run_itp_mode(mols, output_dir='.', obmols=None, molecule_name=None):
         params_atom, params_bonded, params_improper = forcefield.params
         mol_name = molecule_name[idx]
         atom_names = [params_atom[i].element for i in range(len(params_atom))]
-        write_gro_file(gro_out, coordinates, res_names, res_ids, box_tensor, atom_names)
+        write_gro_file(gro_out, coordinates, box_tensor, res_names, res_ids, atom_names)
         write_itp_file(itp_out, forcefield, res_names, res_ids, mol_name=mol_name, write_atomtypes=True)
 
         logger.info(f"Successfully generated files for molecule object {idx + 1}: {gro_out} & {itp_out}")
@@ -158,7 +158,7 @@ def run_top_mode(rdmol, output_dir='.', base_name="system", obmol=None):
     atom_names = [params_atom[i].element for i in range(len(params_atom))]
 
     # Directly export consolidated structural records
-    write_gro_file(gro_out, coordinates, res_names, res_ids, box_tensor, atom_names)
+    write_gro_file(gro_out, coordinates, box_tensor, res_names, res_ids, atom_names)
     write_top_file(top_out, forcefield, res_names, res_ids)
 
     logger.info(f"Successfully generated total system files: {gro_out} & {top_out}")
