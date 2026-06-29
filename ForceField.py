@@ -17,6 +17,7 @@ class FF(object):
         self.success = False
         self._missing = None
         self.charges = {}
+        self._meta = None
 
     def setup(self, rdmol: Chem.Mol, obmol: ob.OBMol = None, charge_factor: float = 1, **kwargs):
         self.rdmol = rdmol
@@ -26,7 +27,7 @@ class FF(object):
         charge_drift = atom_count = 0
 
         if self.name == 'opls':
-            self.params, self._missing, self.success = opls_setup(rdmol, obmol, **kwargs)
+            self.params, self._missing, self.success, self._meta = opls_setup(rdmol, obmol, **kwargs)
             if self.success:
                 for idx in self.params[0]:
                     charge_drift += float(self.params[0][idx].charge)

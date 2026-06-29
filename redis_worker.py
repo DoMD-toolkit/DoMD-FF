@@ -10,6 +10,7 @@ from redis.exceptions import RedisError, TimeoutError, ConnectionError
 from rdkit.Chem import rdMolHash
 
 from ForceField import FF
+from lib import print_opls_stats
 from misc.io.gmx import write_gro_file, write_top_file, write_list_itp_files
 from misc.logger import task_file_log_scope, mol_file_log_scope
 from misc.parser import molecule_reader, molecule_reader_list
@@ -208,7 +209,8 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
                         overwrite=params.get("overwrite"),
                         charge_factor=params.get("charge_factor"),
                     )
-
+                    
+                    print_opls_stats(forcefield, web_logger, "info" if forcefield.success else "warning")
                     if not forcefield.success:
                         raise ValueError("Force-field parameterization failed. Please check the log files.")
 
@@ -279,6 +281,7 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
                                         "idx": idx,
                                         "notfound": False,
                                     }
+                                print_opls_stats(forcefield, web_logger, "info" if forcefield.success else "warning")
 
                     if num_success == len(mol_list):
                         compute_status = "SUCCESS"

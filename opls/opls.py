@@ -188,4 +188,11 @@ def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True, useBOSS=Fal
     success = (len(params_atoms) == rdmol.GetNumAtoms() and m_b == len(bond_idx) and m_a == len(
         angle_idx) and m_d == len(dihedral_idx) and len(params_impropers) == len(improper_idx))
 
-    return (params_atoms, params_bonded, params_impropers), (missing_atoms, missing_bonded, missing_impropers), success
+    meta = {'n_atom': len(params_atoms), 'n_bond': m_b, 'n_ang': m_a, 'n_dih': m_d, 'n_imp': len(params_impropers),
+            't_atom': rdmol.GetNumAtoms(), 't_bond': len(bond_idx), 't_ang': len(angle_idx), 't_dih': len(dihedral_idx),
+            't_imp': len(params_impropers)}
+
+    return ((params_atoms, params_bonded, params_impropers),
+            (missing_atoms, missing_bonded, missing_impropers),
+            success,
+            meta)
