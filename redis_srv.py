@@ -72,6 +72,10 @@ def task_meta_key(task_id: str) -> str:
     return f"task_meta_{task_id}"
 
 
+def task_logs_key(task_id: str) -> str:
+    return f"task_logs_{task_id}"
+
+
 def result_zip_path(task_id: str) -> str:
     return os.path.join(WORKSPACE_BASE, f"{task_id}_result.zip")
 
@@ -339,22 +343,57 @@ async def task_status(task_id: str):
     return await get_task_status_payload(task_id)
 
 
+def parse_log_record(raw: str) -> tuple[int, str]:
+    try:
+        record = json.loads(raw)
+        seq = int(record.get("seq", 0) or 0)
+        message = str(record.get("message", ""))
+        return seq, message
+    except (TypeError, ValueError, json.JSONDecodeError):
+        # This should not normally happen with the current worker, but returning
+        # seq=0 keeps the SSE endpoint robust if a raw string appears.
+        return 0, str(raw)
+
+
+def make_sse_log_event(seq: int, message: str) -> dict:
+    if seq > 0:
+        return {"id": str(seq), "data": message}
+    return {"data": message}
+
+
 @app.get("/api/stream_logs/{task_id}")
-async def stream_logs(task_id: str):
+async def stream_logs(task_id: str, after: int = 0):
     async def event_generator():
         if not is_valid_task_id(task_id):
             yield {"data": "ERROR: Invalid task id."}
             yield {"data": "[[DONE_ERROR]]"}
             return
 
+        last_sent_seq = max(int(after or 0), 0)
         pubsub = redis_client.pubsub()
         channel_name = f"log_channel_{task_id}"
         await pubsub.subscribe(channel_name)
 
         try:
+            # Subscribe first, then replay the persisted tail. If a log is both
+            # present in history and received through pub/sub, the sequence check
+            # below prevents duplicate delivery.
+            history = await redis_client.lrange(task_logs_key(task_id), 0, -1)
+            for raw in history:
+                seq, message = parse_log_record(raw)
+                if seq <= last_sent_seq:
+                    continue
+
+                last_sent_seq = seq
+                yield make_sse_log_event(seq, message)
+                if message.startswith("[[DONE_"):
+                    return
+
             status_payload = await get_task_status_payload(task_id)
             task_state = status_payload.get("task_state")
             if task_state in TERMINAL_STATES:
+                # The task has finished, but the terminal marker was not available
+                # in the bounded log buffer. Send a synthetic completion event.
                 yield {"data": f"[[DONE_{task_state}]]"}
                 return
 
@@ -362,9 +401,13 @@ async def stream_logs(task_id: str):
                 message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=15.0)
 
                 if message is not None:
-                    data = message["data"]
-                    yield {"data": data}
-                    if isinstance(data, str) and data.startswith("[[DONE_"):
+                    seq, data = parse_log_record(message["data"])
+                    if seq <= last_sent_seq:
+                        continue
+
+                    last_sent_seq = seq
+                    yield make_sse_log_event(seq, data)
+                    if data.startswith("[[DONE_"):
                         break
                 else:
                     yield {"event": "ping", "data": "keepalive"}
@@ -379,7 +422,6 @@ async def stream_logs(task_id: str):
                 pass
 
     return EventSourceResponse(event_generator())
-
 
 @app.get("/api/download/{task_id}")
 async def download_result(task_id: str):

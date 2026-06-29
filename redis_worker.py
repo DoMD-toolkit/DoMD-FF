@@ -6,8 +6,8 @@ import time
 import zipfile
 
 import redis
-from redis.exceptions import RedisError, TimeoutError, ConnectionError
 from rdkit.Chem import rdMolHash
+from redis.exceptions import RedisError, TimeoutError, ConnectionError
 
 from ForceField import FF
 from lib import print_opls_stats
@@ -18,6 +18,7 @@ from misc.parser import molecule_reader, molecule_reader_list
 WORKSPACE_BASE = os.getenv("WORKSPACE_BASE", "./workspaces")
 TASK_QUEUE = os.getenv("TASK_QUEUE", "md_task_queue")
 TASK_TTL_SECONDS = int(os.getenv("TASK_TTL_SECONDS", "86400"))
+TASK_LOG_BUFFER_SIZE = int(os.getenv("TASK_LOG_BUFFER_SIZE", "1000"))
 REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 
@@ -44,6 +45,14 @@ def now_ts() -> int:
 
 def task_meta_key(task_id: str) -> str:
     return f"task_meta_{task_id}"
+
+
+def task_logs_key(task_id: str) -> str:
+    return f"task_logs_{task_id}"
+
+
+def task_log_seq_key(task_id: str) -> str:
+    return f"task_log_seq_{task_id}"
 
 
 def result_zip_path(task_id: str) -> str:
@@ -105,16 +114,32 @@ def update_task_meta(task_id: str, state: str, message: str, work_dir: str, term
     return meta
 
 
-def publish_best_effort(channel: str, message: str) -> None:
+def publish_log_event(task_id: str, message: str) -> None:
+    """Persist a bounded log event and publish it to the live SSE channel.
+
+    Redis pub/sub is real-time only, so each log event also gets a monotonic
+    sequence number and is stored in task_logs_<task_id>. The frontend stores
+    the last seen sequence and reconnects with ?after=<seq> to avoid replaying
+    old logs after a browser refresh or network interruption.
+    """
     try:
-        redis_client.publish(channel, message)
+        seq = redis_client.incr(task_log_seq_key(task_id))
+        record = json.dumps({"seq": seq, "message": message}, ensure_ascii=True)
+
+        pipe = redis_client.pipeline(transaction=False)
+        pipe.rpush(task_logs_key(task_id), record)
+        pipe.ltrim(task_logs_key(task_id), -TASK_LOG_BUFFER_SIZE, -1)
+        pipe.expire(task_logs_key(task_id), TASK_TTL_SECONDS)
+        pipe.expire(task_log_seq_key(task_id), TASK_TTL_SECONDS)
+        pipe.publish(f"log_channel_{task_id}", record)
+        pipe.execute()
     except RedisError as exc:
-        print(f"[WARN] Redis publish failed; frontend live log may miss this message: {exc}", flush=True)
+        print(f"[WARN] Redis log delivery failed; frontend live log may miss this message: {exc}", flush=True)
 
 
 def finalize_task(task_id: str, state: str, work_dir: str, message: str) -> None:
     update_task_meta(task_id, state, message, work_dir, terminal=True)
-    publish_best_effort(f"log_channel_{task_id}", f"[[DONE_{state}]]")
+    publish_log_event(task_id, f"[[DONE_{state}]]")
 
 
 def setup_worker_logger(task_id: str):
@@ -128,9 +153,9 @@ def setup_worker_logger(task_id: str):
             handler.close()
 
     class RedisPubSubHandler(logging.Handler):
-        def __init__(self, channel):
+        def __init__(self, task_id: str):
             super().__init__()
-            self.channel = channel
+            self.task_id = task_id
             self.next_warning_at = 0
 
         def emit(self, record):
@@ -139,19 +164,18 @@ def setup_worker_logger(task_id: str):
 
             msg = self.format(record)
             try:
-                redis_client.publish(self.channel, msg)
-            except RedisError as exc:
+                publish_log_event(self.task_id, msg)
+            except Exception as exc:
                 # Logging must never break the scientific computation.
                 current_ts = time.time()
                 if current_ts >= self.next_warning_at:
                     print(
-                        f"[WARN] Redis publish failed; frontend live log may miss messages: {exc}",
+                        f"[WARN] Redis log delivery failed; frontend live log may miss messages: {exc}",
                         flush=True,
                     )
                     self.next_warning_at = current_ts + 30
 
-    channel_name = f"log_channel_{task_id}"
-    pubsub_handler = RedisPubSubHandler(channel_name)
+    pubsub_handler = RedisPubSubHandler(task_id)
     pubsub_handler.setLevel(logging.INFO)
     pubsub_handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
 
@@ -189,7 +213,7 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
             )
 
             try:
-                web_logger.info(f"Molecular file: {file_paths.get('mol_file_path')}")
+                web_logger.info(f"Molecular file: {os.path.basename(file_paths.get('mol_file_path'))}")
 
                 if params.get("run_mode") == "top_mode":
                     output_gro_path = os.path.join(work_dir, "output.gro")
@@ -209,7 +233,7 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
                         overwrite=params.get("overwrite"),
                         charge_factor=params.get("charge_factor"),
                     )
-                    
+
                     print_opls_stats(forcefield, web_logger, "info" if forcefield.success else "warning")
                     if not forcefield.success:
                         raise ValueError("Force-field parameterization failed. Please check the log files.")
@@ -246,14 +270,15 @@ def run_heavy_compute(task_id: str, file_paths: dict, params: dict, work_dir: st
                                 itp_fns.append(os.path.join(work_dir, f"{idx:06d}_{ret['idx']:06d}.itp"))
                                 mol_names.append(f"{idx:06d}")
                                 forcefields.append(forcefield)
-                                web_logger.info(f"Molecule {idx:06d} parameterization succeeded using cache {ret['idx']}.")
+                                # web_logger.debug(f"Molecule {idx:06d} parameterization succeeded using cache {ret['idx']}.")
                                 num_success += 1
                             else:
-                                web_logger.info(f"Molecule {idx:06d} parameterization failed using cache {ret['idx']}.")
+                                pass
+                                # web_logger.debug(f"Molecule {idx:06d} parameterization failed using cache {ret['idx']}.")
                         else:
                             with mol_file_log_scope(idx, work_dir) as mol_log_path:
                                 mol_log_paths.append(mol_log_path)
-                                web_logger.info(f"Starting parameterization for molecule {idx:06d}.")
+                                web_logger.info(f"Starting parameterization for UNIQUE molecule {idx:06d}.")
 
                                 forcefield = FF("opls")
                                 forcefield.setup(
@@ -363,7 +388,8 @@ def main():
             created_at = int(task_data.get("created_at", now_ts()))
 
             if now_ts() - created_at > TASK_TTL_SECONDS:
-                print(f"[WARN] Dropping expired task {task_id}; queue payload is older than retention window.", flush=True)
+                print(f"[WARN] Dropping expired task {task_id}; queue payload is older than retention window.",
+                      flush=True)
                 continue
 
             print(f"[SYSTEM] Task {task_id} received from {queue_name}. Executing.", flush=True)

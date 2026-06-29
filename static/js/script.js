@@ -92,7 +92,31 @@ function getStoredTask() {
 }
 
 function saveStoredTask(record) {
-    localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify({ ...record, updatedAt: Date.now() }));
+    const existing = getStoredTask();
+    const merged = existing && existing.taskId === record.taskId
+        ? { ...existing, ...record }
+        : record;
+    localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify({ ...merged, updatedAt: Date.now() }));
+}
+
+function updateStoredLogSeq(taskId, seq) {
+    if (!Number.isFinite(seq) || seq <= 0) return;
+
+    const existing = getStoredTask();
+    if (!existing || existing.taskId !== taskId) return;
+
+    const currentSeq = Number(existing.lastLogSeq || 0);
+    if (seq > currentSeq) {
+        saveStoredTask({ ...existing, lastLogSeq: seq });
+    }
+}
+
+function getStoredLogSeq(taskId) {
+    const existing = getStoredTask();
+    if (!existing || existing.taskId !== taskId) return 0;
+
+    const seq = Number(existing.lastLogSeq || 0);
+    return Number.isFinite(seq) && seq > 0 ? seq : 0;
 }
 
 function markStoredTaskFinal(taskId, state) {
@@ -251,6 +275,15 @@ async function queryTaskStatus(taskId, options = {}) {
             if (!options.silentLog) logToTerminal("INFO: Task is not visible on the server yet. Keeping the saved id for another check.");
             return payload;
         }
+
+        // During recovery, if this browser has already seen part of the log,
+        // reconnect once to fetch only the missing tail and terminal marker.
+        // If lastLogSeq is 0, do not replay the whole history automatically.
+        if (options.resumeStream === true && state !== "NOT_FOUND" && getStoredLogSeq(taskId) > 0) {
+            connectLogStream(taskId);
+            return payload;
+        }
+
         applyTerminalStatus(taskId, state, { hasResult: payload.has_result, downloadUrl: payload.download_url, silentLog: options.silentLog });
     } else if (state === "QUEUED" || state === "RUNNING") {
         saveStoredTask({ taskId, state, terminal: false, checked: false, createdAt: options.createdAt || Date.now() });
@@ -283,9 +316,17 @@ function connectLogStream(taskId) {
     if (activeEventSource) { activeEventSource.close(); activeEventSource = null; }
 
     activeTaskId = taskId;
-    activeEventSource = new EventSource(`/api/stream_logs/${encodeURIComponent(taskId)}`);
+
+    const afterSeq = getStoredLogSeq(taskId);
+    const streamUrl = `/api/stream_logs/${encodeURIComponent(taskId)}?after=${encodeURIComponent(afterSeq)}`;
+    activeEventSource = new EventSource(streamUrl);
 
     activeEventSource.onmessage = function(event) {
+        const seq = Number.parseInt(event.lastEventId || "0", 10);
+        if (Number.isFinite(seq) && seq > 0) {
+            updateStoredLogSeq(taskId, seq);
+        }
+
         if (event.data.startsWith("[[DONE_")) {
             const statusType = event.data.replace("[[DONE_", "").replace("]]", "");
             applyTerminalStatus(taskId, statusType);
@@ -295,7 +336,7 @@ function connectLogStream(taskId) {
     };
 
     activeEventSource.onerror = () => {
-        logToTerminal("WARNING: SSE stream interrupted. Task id is saved locally.");
+        logToTerminal("WARNING: SSE stream interrupted. Task id and log cursor are saved locally.");
         if (activeEventSource) { activeEventSource.close(); activeEventSource = null; }
         resultArea.className = "";
         resultMsg.textContent = "[SYSTEM ALERT] Connection lost. Task status will be checked again when possible.";
@@ -411,7 +452,7 @@ submitBtn.addEventListener('click', async () => {
     catch (err) { showModal(String(err), true); return; }
 
     const createdAt = Date.now();
-    saveStoredTask({ taskId, state: "SUBMITTING", terminal: false, checked: false, createdAt });
+    saveStoredTask({ taskId, state: "SUBMITTING", terminal: false, checked: false, createdAt, lastLogSeq: 0 });
     activeTaskId = taskId;
 
     submitBtn.disabled = true;
@@ -443,7 +484,7 @@ submitBtn.addEventListener('click', async () => {
         const confirmedTaskId = data.task_id || taskId;
         if (confirmedTaskId !== taskId) logToTerminal(`WARNING: Server returned a different task id: ${confirmedTaskId}. Using server id for recovery.`);
 
-        saveStoredTask({ taskId: confirmedTaskId, state: data.task_state || "QUEUED", terminal: false, checked: false, createdAt });
+        saveStoredTask({ taskId: confirmedTaskId, state: data.task_state || "QUEUED", terminal: false, checked: false, createdAt, lastLogSeq: getStoredLogSeq(confirmedTaskId) });
 
         resultMsg.textContent = "[PROCESSING] Data received. Awaiting computation logs...";
         logToTerminal(`INFO: Task id ${confirmedTaskId} confirmed by server.`);

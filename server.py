@@ -51,6 +51,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 WORKSPACE_BASE = os.getenv("WORKSPACE_BASE", "./workspaces")
 TASK_TTL_SECONDS = int(os.getenv("TASK_TTL_SECONDS", "86400"))
+TASK_LOG_BUFFER_SIZE = int(os.getenv("TASK_LOG_BUFFER_SIZE", "1000"))
 
 TASK_ID_RE = re.compile(r"^task_[a-f0-9]{32}$")
 TERMINAL_STATES = {"SUCCESS", "PARTIAL", "ERROR"}
@@ -58,10 +59,13 @@ NON_TERMINAL_STATES = {"QUEUED", "RUNNING"}
 
 os.makedirs(WORKSPACE_BASE, exist_ok=True)
 
-# In-process equivalents of the deploy version's Redis queue, task_meta records, and log pub/sub.
+# In-process equivalents of the deploy version's Redis queue, task_meta records,
+# bounded task log buffers, and live log subscribers.
 task_meta_store: Dict[str, dict] = {}
 task_claims: Dict[str, int] = {}
-task_log_queues: Dict[str, asyncio.Queue] = {}
+task_log_buffers: Dict[str, List[dict]] = {}
+task_log_seq_store: Dict[str, int] = {}
+task_log_subscribers: Dict[str, List[asyncio.Queue]] = {}
 store_lock = threading.RLock()
 
 job_queue: Optional[asyncio.Queue] = None
@@ -247,7 +251,9 @@ def cleanup_expired_memory() -> None:
         for task_id in expired_task_ids:
             task_meta_store.pop(task_id, None)
             task_claims.pop(task_id, None)
-            task_log_queues.pop(task_id, None)
+            task_log_buffers.pop(task_id, None)
+            task_log_seq_store.pop(task_id, None)
+            task_log_subscribers.pop(task_id, None)
 
         expired_claims = [
             task_id for task_id, created_at in task_claims.items()
@@ -276,19 +282,69 @@ async def get_task_status_payload(task_id: str) -> dict:
     return not_found_payload(task_id)
 
 
-def get_log_queue(task_id: str) -> Optional[asyncio.Queue]:
+def append_task_log(task_id: str, message: str) -> dict:
+    """Append one log event to the in-memory bounded log buffer.
+
+    This mirrors the Redis deployment version's task_logs_<task_id> records:
+    each frontend-visible log line gets a monotonic seq so the browser can
+    reconnect with ?after=<seq> and receive only the missing tail.
+    """
     with store_lock:
-        return task_log_queues.get(task_id)
+        seq = int(task_log_seq_store.get(task_id, 0)) + 1
+        task_log_seq_store[task_id] = seq
+
+        record = {"seq": seq, "message": message}
+        buffer = task_log_buffers.setdefault(task_id, [])
+        buffer.append(record)
+        if len(buffer) > TASK_LOG_BUFFER_SIZE:
+            del buffer[:-TASK_LOG_BUFFER_SIZE]
+
+        subscribers = list(task_log_subscribers.get(task_id, []))
+
+    return {"seq": seq, "message": message, "subscribers": subscribers}
+
+
+def get_log_history_after(task_id: str, after: int) -> List[dict]:
+    after = max(int(after or 0), 0)
+    with store_lock:
+        return [copy.deepcopy(record) for record in task_log_buffers.get(task_id, []) if int(record.get("seq", 0)) > after]
+
+
+def add_log_subscriber(task_id: str) -> asyncio.Queue:
+    queue = asyncio.Queue()
+    with store_lock:
+        task_log_subscribers.setdefault(task_id, []).append(queue)
+    return queue
+
+
+def remove_log_subscriber(task_id: str, queue: asyncio.Queue) -> None:
+    with store_lock:
+        subscribers = task_log_subscribers.get(task_id)
+        if not subscribers:
+            return
+        try:
+            subscribers.remove(queue)
+        except ValueError:
+            pass
+        if not subscribers:
+            task_log_subscribers.pop(task_id, None)
+
+
+def make_sse_log_event(seq: int, message: str) -> dict:
+    if seq > 0:
+        return {"id": str(seq), "data": message}
+    return {"data": message}
 
 
 def emit_task_log(task_id: str, message: str, loop: asyncio.AbstractEventLoop) -> None:
-    queue = get_log_queue(task_id)
-    if queue is None:
-        return
-    loop.call_soon_threadsafe(queue.put_nowait, message)
+    record = append_task_log(task_id, message)
+    event_record = {"seq": record["seq"], "message": record["message"]}
+
+    for queue in record["subscribers"]:
+        loop.call_soon_threadsafe(queue.put_nowait, event_record)
 
 
-def setup_task_logger(task_id: str, log_queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
+def setup_task_logger(task_id: str, loop: asyncio.AbstractEventLoop):
     logger = logging.getLogger(f"task_{task_id}")
     logger.setLevel(logging.INFO)
     logger.propagate = False
@@ -300,9 +356,15 @@ def setup_task_logger(task_id: str, log_queue: asyncio.Queue, loop: asyncio.Abst
 
     class AsyncQueueHandler(logging.Handler):
         def emit(self, record):
-            if record.levelno >= logging.INFO:
-                msg = self.format(record)
-                loop.call_soon_threadsafe(log_queue.put_nowait, msg)
+            if record.levelno < logging.INFO:
+                return
+
+            msg = self.format(record)
+            try:
+                emit_task_log(task_id, msg, loop)
+            except Exception as exc:
+                # Frontend logging must never break the scientific computation.
+                print(f"[WARN] Local log delivery failed; frontend live log may miss messages: {exc}", flush=True)
 
     queue_handler = AsyncQueueHandler()
     queue_handler.setLevel(logging.INFO)
@@ -328,12 +390,11 @@ def run_heavy_compute(
     file_paths: dict,
     params: dict,
     work_dir: str,
-    log_queue: asyncio.Queue,
     loop: asyncio.AbstractEventLoop,
 ):
     compute_status = "SUCCESS"
     zip_path = result_zip_path(task_id)
-    web_logger = setup_task_logger(task_id, log_queue, loop)
+    web_logger = setup_task_logger(task_id, loop)
 
     update_task_meta(
         task_id,
@@ -411,14 +472,15 @@ def run_heavy_compute(
                                 itp_fns.append(os.path.join(work_dir, f"{idx:06d}_{ret['idx']:06d}.itp"))
                                 mol_names.append(f"{idx:06d}")
                                 forcefields.append(forcefield)
-                                web_logger.info(f"Molecule {idx:06d} parameterization succeeded using cache {ret['idx']}.")
+                                # web_logger.info(f"Molecule {idx:06d} parameterization succeeded using cache {ret['idx']}.")
                                 num_success += 1
                             else:
-                                web_logger.info(f"Molecule {idx:06d} parameterization failed using cache {ret['idx']}.")
+                                pass
+                                # web_logger.info(f"Molecule {idx:06d} parameterization failed using cache {ret['idx']}.")
                         else:
                             with mol_file_log_scope(idx, work_dir) as mol_log_path:
                                 mol_log_paths.append(mol_log_path)
-                                web_logger.info(f"Starting parameterization for molecule {idx:06d}.")
+                                web_logger.info(f"Starting parameterization for UNIQUE molecule {idx:06d}.")
 
                                 forcefield = FF("opls")
                                 forcefield.setup(
@@ -522,12 +584,6 @@ async def inprocess_worker() -> None:
                 emit_task_log(task_id, "[[DONE_ERROR]]", loop)
                 continue
 
-            queue = get_log_queue(task_id)
-            if queue is None:
-                queue = asyncio.Queue()
-                with store_lock:
-                    task_log_queues[task_id] = queue
-
             print(f"[SYSTEM] Local task {task_id} received. Executing.", flush=True)
             await asyncio.to_thread(
                 run_heavy_compute,
@@ -535,7 +591,6 @@ async def inprocess_worker() -> None:
                 payload["file_paths"],
                 payload["params"],
                 work_dir,
-                queue,
                 loop,
             )
             print(f"[SYSTEM] Local task {task_id} completed.", flush=True)
@@ -623,11 +678,11 @@ async def upload_and_run(
             work_dir=work_dir,
             created_at=created_at,
         )
-        log_queue = asyncio.Queue()
-
         with store_lock:
             task_meta_store[task_id] = task_meta
-            task_log_queues[task_id] = log_queue
+            task_log_buffers[task_id] = []
+            task_log_seq_store[task_id] = 0
+            task_log_subscribers.setdefault(task_id, [])
 
         write_local_meta(work_dir, task_meta)
 
@@ -656,14 +711,18 @@ async def upload_and_run(
         with store_lock:
             task_claims.pop(task_id, None)
             task_meta_store.pop(task_id, None)
-            task_log_queues.pop(task_id, None)
+            task_log_buffers.pop(task_id, None)
+            task_log_seq_store.pop(task_id, None)
+            task_log_subscribers.pop(task_id, None)
         shutil.rmtree(work_dir, ignore_errors=True)
         return {"status": "error", "error": f"Could not store uploaded files: {exc}"}
     except Exception as exc:
         with store_lock:
             task_claims.pop(task_id, None)
             task_meta_store.pop(task_id, None)
-            task_log_queues.pop(task_id, None)
+            task_log_buffers.pop(task_id, None)
+            task_log_seq_store.pop(task_id, None)
+            task_log_subscribers.pop(task_id, None)
         shutil.rmtree(work_dir, ignore_errors=True)
         return {"status": "error", "error": f"Could not queue local task: {exc}"}
 
@@ -681,39 +740,66 @@ async def task_status(task_id: str):
 
 
 @app.get("/api/stream_logs/{task_id}")
-async def stream_logs(task_id: str):
+async def stream_logs(task_id: str, after: int = 0):
     async def event_generator():
         if not is_valid_task_id(task_id):
             yield {"data": "ERROR: Invalid task id."}
             yield {"data": "[[DONE_ERROR]]"}
             return
 
-        status_payload = await get_task_status_payload(task_id)
-        task_state = status_payload.get("task_state")
-        if task_state in TERMINAL_STATES:
-            yield {"data": f"[[DONE_{task_state}]]"}
-            return
-        if task_state == "NOT_FOUND":
-            yield {"data": "ERROR: Task not found or expired."}
-            yield {"data": "[[DONE_ERROR]]"}
-            return
+        last_sent_seq = max(int(after or 0), 0)
+        subscriber_queue = add_log_subscriber(task_id)
 
-        queue = get_log_queue(task_id)
-        if queue is None:
-            yield {"data": "ERROR: Live log queue is unavailable for this task."}
-            yield {"data": "[[DONE_ERROR]]"}
-            return
+        try:
+            # Subscribe first, then replay the bounded history. If a message is
+            # appended while history is being replayed, seq-based de-duplication
+            # below prevents duplicate delivery.
+            history = get_log_history_after(task_id, last_sent_seq)
+            for record in history:
+                seq = int(record.get("seq", 0))
+                message = str(record.get("message", ""))
+                if seq <= last_sent_seq:
+                    continue
 
-        while True:
-            try:
-                msg = await asyncio.wait_for(queue.get(), timeout=15.0)
-            except asyncio.TimeoutError:
-                yield {"event": "ping", "data": "keepalive"}
-                continue
+                last_sent_seq = seq
+                yield make_sse_log_event(seq, message)
+                if message.startswith("[[DONE_"):
+                    return
 
-            yield {"data": msg}
-            if isinstance(msg, str) and msg.startswith("[[DONE_"):
-                break
+            status_payload = await get_task_status_payload(task_id)
+            task_state = status_payload.get("task_state")
+            if task_state in TERMINAL_STATES:
+                # The local process may have restarted, or the bounded buffer may
+                # no longer contain the terminal marker. Send a synthetic final
+                # event so the frontend can finish cleanly.
+                yield {"data": f"[[DONE_{task_state}]]"}
+                return
+            if task_state == "NOT_FOUND":
+                yield {"data": "ERROR: Task not found or expired."}
+                yield {"data": "[[DONE_ERROR]]"}
+                return
+
+            while True:
+                try:
+                    record = await asyncio.wait_for(subscriber_queue.get(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    yield {"event": "ping", "data": "keepalive"}
+                    continue
+
+                seq = int(record.get("seq", 0))
+                message = str(record.get("message", ""))
+                if seq <= last_sent_seq:
+                    continue
+
+                last_sent_seq = seq
+                yield make_sse_log_event(seq, message)
+                if message.startswith("[[DONE_"):
+                    break
+
+        except asyncio.CancelledError:
+            pass
+        finally:
+            remove_log_subscriber(task_id, subscriber_queue)
 
     return EventSourceResponse(event_generator())
 
