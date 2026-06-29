@@ -41,7 +41,7 @@ def generate_perfect_separated_test_systems(pdb_out="test_system.pdb", sdf_out="
 
     combined_mol = Chem.CombineMols(mol1, mol2)
     combined_mol = Chem.CombineMols(combined_mol, mol3)
-    combined_mol = Chem.CombineMols(combined_mol, mol4)
+    # combined_mol = Chem.CombineMols(combined_mol, mol4)
 
     benzene_query = Chem.MolFromSmarts("c1ccccc1")
     ring_matches = combined_mol.GetSubstructMatches(benzene_query)
