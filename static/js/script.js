@@ -11,6 +11,56 @@ const submitBtn = document.getElementById('submitBtn');
 const TASK_STORAGE_KEY = "domd_active_task_v1";
 const TERMINAL_STATES = new Set(["SUCCESS", "PARTIAL", "ERROR", "NOT_FOUND"]);
 
+
+function detectAppBasePath() {
+    const currentScript = document.currentScript;
+    if (currentScript && currentScript.src) {
+        const scriptUrl = new URL(currentScript.src, window.location.href);
+        const staticMarker = "/static/";
+        const staticIndex = scriptUrl.pathname.indexOf(staticMarker);
+        if (staticIndex >= 0) {
+            return scriptUrl.pathname.slice(0, staticIndex + 1) || "/";
+        }
+    }
+
+    const baseElement = document.querySelector('base[href]');
+    const baseHref = baseElement ? baseElement.getAttribute('href') : document.baseURI;
+    const baseUrl = new URL(baseHref, window.location.href);
+    let basePath = baseUrl.pathname || "/";
+
+    if (!basePath.endsWith("/")) {
+        basePath = basePath.replace(/[^/]*$/, "");
+    }
+
+    return basePath || "/";
+}
+
+const APP_BASE_PATH = detectAppBasePath();
+
+function appUrl(path) {
+    if (path === null || path === undefined) return APP_BASE_PATH;
+
+    const rawPath = String(path);
+    if (/^[a-z][a-z0-9+.-]*:/i.test(rawPath) || rawPath.startsWith("//")) {
+        return rawPath;
+    }
+
+    const baseWithoutTrailingSlash = APP_BASE_PATH.endsWith("/")
+        ? APP_BASE_PATH.slice(0, -1)
+        : APP_BASE_PATH;
+
+    if (
+        rawPath.startsWith(APP_BASE_PATH) ||
+        (baseWithoutTrailingSlash && rawPath === baseWithoutTrailingSlash) ||
+        (baseWithoutTrailingSlash && rawPath.startsWith(`${baseWithoutTrailingSlash}/`))
+    ) {
+        return rawPath;
+    }
+
+    const normalizedPath = rawPath.replace(/^\/+/, "");
+    return `${APP_BASE_PATH}${normalizedPath}`;
+}
+
 let stateFiles = { mol: null };
 let activeEventSource = null;
 let activeTaskId = null;
@@ -206,7 +256,7 @@ function resetResultArea() {
 
 function applyTerminalStatus(taskId, statusType, options = {}) {
     const hasResult = options.hasResult !== false;
-    const downloadUrl = options.downloadUrl || `/api/download/${taskId}`;
+    const downloadUrl = appUrl(options.downloadUrl || `api/download/${taskId}`);
 
     resultArea.className = `status-${statusType.toLowerCase()}`;
 
@@ -260,7 +310,7 @@ function applyNonTerminalStatus(taskId, statusType) {
 }
 
 async function queryTaskStatus(taskId, options = {}) {
-    const response = await fetch(`/api/task_status/${encodeURIComponent(taskId)}`, { method: "GET", cache: "no-store" });
+    const response = await fetch(appUrl(`api/task_status/${encodeURIComponent(taskId)}`), { method: "GET", cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     const payload = await response.json();
@@ -318,7 +368,7 @@ function connectLogStream(taskId) {
     activeTaskId = taskId;
 
     const afterSeq = getStoredLogSeq(taskId);
-    const streamUrl = `/api/stream_logs/${encodeURIComponent(taskId)}?after=${encodeURIComponent(afterSeq)}`;
+    const streamUrl = appUrl(`api/stream_logs/${encodeURIComponent(taskId)}?after=${encodeURIComponent(afterSeq)}`);
     activeEventSource = new EventSource(streamUrl);
 
     activeEventSource.onmessage = function(event) {
@@ -376,7 +426,7 @@ async function uploadWithProgress(formData) {
 
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', '/api/upload_and_run');
+        xhr.open('POST', appUrl('api/upload_and_run'));
 
         const time = new Date().toTimeString().split(' ')[0];
 
