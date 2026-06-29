@@ -17,6 +17,15 @@ A comprehensive toolkit for generating OPLS force field parameters for molecules
 
 ## Quick Start
 
+### Environment
+
+```bash
+$ conda create -n my_env -c conda-forge python nomkl numpy rdkit openbabel numba networkx pandas scipy jupyter scikit-learn matplotlib MDAnalysis fastapi uvicorn python-multipart sse-starlette
+$ pip3 install torch torchvision
+$ pip install torch_geometric
+$ conda activate my_env
+```
+
 ### WebUI
 
 We provide a lightweight Web User Interface for immediate testing. You can start the server locally:
