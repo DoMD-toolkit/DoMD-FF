@@ -142,7 +142,7 @@ def mlcharge(mol_graph):
     with torch.no_grad():
         output, fv = CHModel(data.x_f_q.float(), data.edge_index, data.bo.float())
         o = (output.reshape(-1, ) / shift).detach().cpu().numpy()
-    o -= (o.sum() - fcharge) / len(o)
+    # o -= (o.sum() - fcharge) / len(o)
     # print(fcharge.sum(), o.sum())
     charge = {}
     for i, c in enumerate(o):
