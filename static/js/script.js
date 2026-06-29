@@ -16,7 +16,6 @@ let activeEventSource = null;
 let activeTaskId = null;
 let recoveryInFlight = false;
 
-// ================= 高速打字机 & 网络波浪流引擎 =================
 let typeQueue = [];
 let isTyping = false;
 
@@ -55,12 +54,11 @@ async function waitForTypeQueue() {
         await new Promise(r => setTimeout(r, 50));
     }
 }
-// ==============================================================
 
 function showModal(msg, isError = true) {
     document.getElementById('modalTitleText').textContent = isError ? "CRITICAL_ERROR" : "SYS_INFO";
     document.querySelector('.modal-title').style.background = isError
-        ? "linear-gradient(90deg, #7f1d1d, #ef4444)"
+        ? "linear-gradient(90deg, #990000, #ff0033)"
         : "linear-gradient(90deg, #0f172a, #1d4ed8)";
     document.getElementById('modalMsg').textContent = msg;
     document.getElementById('modalOverlay').style.display = "flex";
@@ -115,7 +113,8 @@ function clearStoredTaskIfExpired() {
 function logToTerminal(msg) {
     const time = new Date().toTimeString().split(' ')[0];
     const lineContainer = document.createElement('span');
-    lineContainer.style.color = '#34d399';
+
+    lineContainer.style.color = '#39ff14';
 
     let fragments = [];
 
@@ -131,11 +130,11 @@ function logToTerminal(msg) {
         const postPunctuation = match[3];
         const restOfMsg = match[4];
 
-        let levelColor = '#34d399';
+        let levelColor = '#39ff14';
         const upLevel = levelWord.toUpperCase();
-        if (upLevel === 'ERROR' || upLevel === 'FATAL') levelColor = '#f87171';
-        else if (upLevel === 'WARNING' || upLevel === 'WARN' || upLevel === 'PARTIAL') levelColor = '#fbbf24';
-        else if (upLevel === 'INFO') levelColor = '#38bdf8';
+        if (upLevel === 'ERROR' || upLevel === 'FATAL') levelColor = '#ff003c';
+        else if (upLevel === 'WARNING' || upLevel === 'WARN' || upLevel === 'PARTIAL') levelColor = '#ffb000';
+        else if (upLevel === 'INFO') levelColor = '#00e5ff';
 
         if (prePunctuation) {
             const preNode = document.createTextNode('');
@@ -162,7 +161,7 @@ function logToTerminal(msg) {
         const textNode = document.createTextNode('');
         if (msg.trim().startsWith('!')) {
             const errSpan = document.createElement('span');
-            errSpan.style.color = '#f87171';
+            errSpan.style.color = '#ff003c';
             lineContainer.appendChild(errSpan);
             fragments.push({ node: errSpan, text: msg });
         } else {
@@ -341,11 +340,11 @@ async function uploadWithProgress(formData) {
         const time = new Date().toTimeString().split(' ')[0];
 
         const prefixSpan = document.createElement('span');
-        prefixSpan.style.color = '#34d399';
+        prefixSpan.style.color = '#39ff14'; // 纯净绿
         prefixSpan.textContent = `\n[${time}] DATA_TRANSFER: `;
 
         const progressSpan = document.createElement('span');
-        progressSpan.style.color = '#38bdf8';
+        progressSpan.style.color = '#00e5ff'; // 赛博青
         progressSpan.textContent = `[····················] 0%`;
 
         typeQueue.push({
@@ -370,19 +369,19 @@ async function uploadWithProgress(formData) {
         xhr.onload = () => {
             if (xhr.status >= 200 && xhr.status < 300) {
                 progressSpan.textContent = `[████████████████████] 100% (OK)`;
-                progressSpan.style.color = '#34d399';
+                progressSpan.style.color = '#39ff14';
                 try { resolve(JSON.parse(xhr.responseText)); }
                 catch (err) { reject("JSON parse error"); }
             } else {
                 progressSpan.textContent = `[SERVER_REJECTED]`;
-                progressSpan.style.color = '#f87171';
+                progressSpan.style.color = '#ff003c';
                 reject(`HTTP ${xhr.status}`);
             }
         };
 
         xhr.onerror = () => {
             progressSpan.textContent = `[NETWORK_LINK_DEAD]`;
-            progressSpan.style.color = '#f87171';
+            progressSpan.style.color = '#ff003c';
             reject("Connection to server lost");
         };
 
