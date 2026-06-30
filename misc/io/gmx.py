@@ -412,7 +412,7 @@ def write_top_file_with_includes(output_path, atomtypes_itp, mol_itp_mapping, mo
 import os
 
 
-def write_list_itp_files(output_path, forcefields, molecule_name, list_res_names=[], list_res_ids=[]):
+def write_list_itp_files(output_path, forcefields, molecule_name, list_res_names=[], list_res_ids=[], write_defaults=True):
     '''
     :: params
         output_path: list, [MOL_0.itp, MOL_1.itp, ...]
@@ -484,4 +484,4 @@ def write_list_itp_files(output_path, forcefields, molecule_name, list_res_names
     else:
         atomtypes_path = "atomtypes.itp"
 
-    write_atomtypes_head(atomtypes_path, global_unique_atomtypes, write_defaults=True)
+    write_atomtypes_head(atomtypes_path, global_unique_atomtypes, write_defaults=write_defaults)
