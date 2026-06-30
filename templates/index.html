@@ -56,7 +56,10 @@
             </span>
         </div>
 
-        <button id="submitBtn" style="margin-top: 12px;">EXECUTE_PIPELINE()</button>
+        <div class="action-row">
+            <button id="submitBtn" type="button">EXECUTE_PIPELINE()</button>
+            <button id="helpBtn" type="button">HELP</button>
+        </div>
 
         <div id="result-area">
             <div class="result-row" id="resultMsg">[SYSTEM STANDBY] Output slot empty.</div>
@@ -91,7 +94,45 @@
     </div>
 </div>
 
-<template class="banner-template" data-group="default">
+<template class="terminal-help-template" data-role="help" data-topic="main">
+<span></span>
+<span style="color:#39ff14;">
+ ================================================================
+                 DOMD AUTOFF QUICK HELP
+ ================================================================
+
+  INPUT
+    Provide one molecular structure file in .pdb or .sdf format.
+
+  RUN MODE
+    TOP Mode : build a complete GROMACS topology for one molecular system.
+    ITP Mode : parameterize molecular fragments and package ITP outputs.
+
+  OPTIONS
+    GMX Template        Use available GROMACS-style template information.
+    OPLS Database       Search the local OPLS parameter database.
+    ML Inference        Enable ML-based parameter inference when available.
+    Overwrite Existing  Allow regeneration of existing intermediate files.
+
+  CHARGE FACTOR
+    Scaling factor applied during charge assignment. The default value is 1.0.
+
+  OUTPUT
+    The result archive contains generated topology files and debug logs.
+    If the job fails, download the archive and inspect debug_error.log.
+
+  RECOVERY
+    The browser saves the active task id and log cursor locally.
+    If the page is refreshed or the connection drops, live logs resume from
+    the last received log sequence when the task is still retained.
+
+ ================================================================
+</span>
+<span style="color:#FFBF00;">For more information, please goto </span><a href="//github.com/DoMD-toolkit/DoMD-FF" target="_blank" style="text-decoration: none;"><span style="color:#39ff14;">https://github.com/DoMD-toolkit/DoMD-FF</span></a>
+<span></span>
+</template>
+
+<template class="banner-template" data-role="banner" data-group="default">
 <span style="color: #39ff14;">!      _____        __  __ _____         ______ ______
 !     |  __ \      |  \/  |  __ \       |  ____|  ____|
 !     | |  | | ___ | \  / | |  | |______| |__  | |__
@@ -101,7 +142,7 @@
 !</span>
 </template>
 
-<template class="banner-template" data-group="default">
+<template class="banner-template" data-role="banner" data-group="default">
 <span style="color: rgba(57, 255, 20, 0.5);"><span style="color: rgba(57, 255, 20, 1.0);">!</span>     ██████╗  ██████╗ ███╗   ███╗██████╗       ███████╗███████╗
 <span style="color: rgba(57, 255, 20, 1.0);">!</span>     ██╔══██╗██╔═══██╗████╗ ████║██╔══██╗      ██╔════╝██╔════╝
 <span style="color: rgba(57, 255, 20, 1.0);">!</span>     ██║  ██║██║   ██║██╔████╔██║██║  ██║█████╗█████╗  █████╗
@@ -110,7 +151,7 @@
 <span style="color: rgba(57, 255, 20, 1.0);">!</span>     ╚═════╝  ╚═════╝ ╚═╝     ╚═╝╚═════╝       ╚═╝     ╚═╝</span>
 </template>
 
-<template class="banner-template" data-group="default">
+<template class="banner-template" data-role="banner" data-group="default">
     <span style="color: #39ff14;">!    O~~~~~              O~~       O~~O~~~~~          O~~~~~~~~O~~~~~~~~
 !    O~~   O~~           O~ O~~   O~~~O~~   O~~       O~~      O~~
 !    O~~    O~~   O~~    O~~ O~~ O O~~O~~    O~~      O~~      O~~
@@ -120,7 +161,7 @@
 !    O~~~~~       O~~    O~~       O~~O~~~~~          O~~      O~~</span>
 </template>
 
-<template class="banner-template" data-group="default">
+<template class="banner-template" data-role="banner" data-group="default">
     <span style="color: #39ff14;">!    DDD      M   M DDD      FFFF FFFF
 !    D  D     MM MM D  D     F    F
 !    D  D ooo M M M D  D --- FFF  FFF
@@ -128,7 +169,7 @@
 !    DDD  ooo M   M DDD      F    F    </span>
 </template>
 
-<template class="banner-template" data-group="default">
+<template class="banner-template" data-role="banner" data-group="default">
     <span style="color: #39ff14;">!     /$$$$$$$            /$$      /$$ /$$$$$$$          /$$$$$$$$ /$$$$$$$$
 !    | $$__  $$          | $$$    /$$$| $$__  $$        | $$_____/| $$_____/
 !    | $$  \ $$  /$$$$$$ | $$$$  /$$$$| $$  \ $$        | $$      | $$
@@ -140,7 +181,7 @@
 !</span>
 </template>
 
-<template class="banner-template" data-group="halloween">
+<template class="banner-template" data-role="banner" data-group="halloween">
     <span style="color: rgba(57, 255, 20, 0.5);"><span style="color: rgba(57, 255, 20, 1.0);">!</span>     ▓█████▄  ▒█████   ███▄ ▄███▓▓█████▄   █████▒  █████▒
 <span style="color: rgba(57, 255, 20, 1.0);">!</span>     ▒██▀ ██▌▒██▒  ██▒▓██▒▀█▀ ██▒▒██▀ ██▌▓██   ▒ ▓██   ▒
 <span style="color: rgba(57, 255, 20, 1.0);">!</span>     ░██   █▌▒██░  ██▒▓██    ▓██░░██   █▌▒████ ░ ▒████ ░
@@ -153,7 +194,7 @@
 <span style="color: rgba(57, 255, 20, 1.0);">!</span>      ░                           ░                      </span>
 </template>
 
-<template class="banner-template" data-group="halloween">
+<template class="banner-template" data-role="banner" data-group="halloween">
     <span style="color: rgba(57, 255, 20, 1);">!     _ .-') _               _   .-')    _ .-') _
 !    ( (  OO) )             ( '.( OO )_ ( (  OO) )
 !     \     .'_  .-'),-----. ,--.   ,--.)\     .'_             ,------.   ,------.
@@ -167,7 +208,7 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const allBanners = Array.from(document.querySelectorAll('.banner-template'));
+        const allBanners = Array.from(document.querySelectorAll('template[data-role="banner"]'));
         if (allBanners.length === 0) return;
 
         const now = new Date();

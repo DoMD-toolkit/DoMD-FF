@@ -7,6 +7,7 @@ const resultArea = document.getElementById('result-area');
 const resultMsg = document.getElementById('resultMsg');
 const downloadLink = document.getElementById('downloadLink');
 const submitBtn = document.getElementById('submitBtn');
+const helpBtn = document.getElementById('helpBtn');
 
 const TASK_STORAGE_KEY = "domd_active_task_v1";
 const TERMINAL_STATES = new Set(["SUCCESS", "PARTIAL", "ERROR", "NOT_FOUND"]);
@@ -102,6 +103,81 @@ async function processTypeQueue() {
 async function waitForTypeQueue() {
     while (isTyping || typeQueue.length > 0) {
         await new Promise(r => setTimeout(r, 50));
+    }
+}
+
+function buildTypedFragmentFromTemplate(template) {
+    const wrapper = document.createElement('span');
+    wrapper.className = 'terminal-template-output';
+
+    const source = document.createElement('div');
+    source.innerHTML = template.innerHTML.trim();
+
+    const fragments = [];
+
+    function cloneNodeForTyping(sourceNode, targetParent) {
+        if (sourceNode.nodeType === Node.TEXT_NODE) {
+            const text = sourceNode.textContent || '';
+            if (text.length === 0) return;
+
+            const targetTextNode = document.createTextNode('');
+            targetParent.appendChild(targetTextNode);
+            fragments.push({ node: targetTextNode, text });
+            return;
+        }
+
+        if (sourceNode.nodeType !== Node.ELEMENT_NODE) {
+            return;
+        }
+
+        const tagName = sourceNode.tagName.toLowerCase();
+        const targetElement = document.createElement(tagName);
+
+        for (const attr of sourceNode.attributes) {
+            targetElement.setAttribute(attr.name, attr.value);
+        }
+
+        targetParent.appendChild(targetElement);
+
+        for (const child of sourceNode.childNodes) {
+            cloneNodeForTyping(child, targetElement);
+        }
+    }
+
+    for (const child of source.childNodes) {
+        cloneNodeForTyping(child, wrapper);
+    }
+
+    return { lineContainer: wrapper, fragments };
+}
+
+function typeTemplateToTerminal(selector) {
+    const template = document.querySelector(selector);
+    if (!template) {
+        logToTerminal('WARNING: Help template is missing.');
+        return;
+    }
+
+    const typedBlock = buildTypedFragmentFromTemplate(template);
+    if (typedBlock.fragments.length === 0) {
+        logToTerminal('WARNING: Help template is empty.');
+        return;
+    }
+
+    typeQueue.push(typedBlock);
+    processTypeQueue();
+}
+
+async function showHelpDocument() {
+    if (!helpBtn) return;
+
+    helpBtn.disabled = true;
+    try {
+        logToTerminal('INFO: Loading embedded help document.');
+        await waitForTypeQueue();
+        typeTemplateToTerminal('template[data-role="help"][data-topic="main"]');
+    } finally {
+        helpBtn.disabled = false;
     }
 }
 
@@ -492,6 +568,10 @@ function probeTaskAfterUnconfirmedUpload(taskId, createdAt, attempt = 1) {
             if (stored && stored.taskId === taskId) saveStoredTask({ ...stored, state: "SUBMITTING", terminal: false, checked: false, lastCheckFailed: true });
         });
     }, delayMs);
+}
+
+if (helpBtn) {
+    helpBtn.addEventListener('click', showHelpDocument);
 }
 
 submitBtn.addEventListener('click', async () => {

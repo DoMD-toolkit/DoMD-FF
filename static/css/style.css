@@ -161,6 +161,37 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 input[type="number"] { -moz-appearance: textfield !important; appearance: none !important; }
 
+
+.action-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+
+#helpBtn {
+    min-width: 76px;
+    color: #1e3a8a;
+}
+
+#helpBtn::before {
+    content: "?";
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 10px;
+    margin-right: 6px;
+    border: 1px solid #1e3a8a;
+    border-radius: 50%;
+    font-size: 10px;
+    line-height: 1;
+}
+
+.terminal-template-output {
+    color: #39ff14;
+}
+
 #result-area {
     border: 1px solid #71717a;
     box-shadow: inset 2px 2px 5px rgba(0,0,0,0.4), inset -1px -1px 0 rgba(255,255,255,0.5);
