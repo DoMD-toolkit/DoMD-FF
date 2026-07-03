@@ -49,6 +49,7 @@ def get_opls_bonded_idx(rdmol: Chem.Mol):
     return bond_idx, angle_idx, dihedral_idx, improper_idx
 
 
+import logging
 
 def print_opls_stats(forcefield, logger, level=logging.WARNING, md_mode=False):
     """
@@ -76,6 +77,7 @@ def print_opls_stats(forcefield, logger, level=logging.WARNING, md_mode=False):
 
     meta = getattr(forcefield, "_meta", None)
     
+    # 异常处理
     if not isinstance(meta, dict):
         if md_mode:
             emit("\n".join([
@@ -100,8 +102,8 @@ def print_opls_stats(forcefield, logger, level=logging.WARNING, md_mode=False):
         ("IMPROPERS", "n_imp",  "t_imp"),
     ]
 
+    # --- 1. 数据计算与提取 ---
     data_rows = []
-
     total_found = 0
     total_expected = 0
 
@@ -163,4 +165,3 @@ def print_opls_stats(forcefield, logger, level=logging.WARNING, md_mode=False):
         lines.append(" ================================================================")
         
         emit(f"{pre_msg}\n" + "\n".join(lines))
-
