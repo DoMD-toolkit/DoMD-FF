@@ -49,7 +49,6 @@ def get_opls_bonded_idx(rdmol: Chem.Mol):
     return bond_idx, angle_idx, dihedral_idx, improper_idx
 
 
-import logging
 
 def print_opls_stats(forcefield, logger, level=logging.WARNING, md_mode=False):
     """
@@ -64,7 +63,7 @@ def print_opls_stats(forcefield, logger, level=logging.WARNING, md_mode=False):
     level : int or str
         Logging level.
     md_mode : bool
-        If True, outputs a standard Markdown table instead of a Fortran-style block.
+        If True, outputs a stripped-down, left-aligned plain text block.
     """
     if isinstance(level, str):
         level_name = level.upper()
@@ -79,7 +78,10 @@ def print_opls_stats(forcefield, logger, level=logging.WARNING, md_mode=False):
     
     if not isinstance(meta, dict):
         if md_mode:
-            emit("\n**FORCE FIELD PARAMETERIZATION STATISTICS**\n\n*WARNING: forcefield._meta is missing or invalid.*")
+            emit("\n".join([
+                "FORCE FIELD PARAMETERIZATION STATISTICS",
+                "WARNING: forcefield._meta is missing or invalid."
+            ]))
         else:
             emit("\n" + "\n".join([
                 " ================================================================",
@@ -118,16 +120,15 @@ def print_opls_stats(forcefield, logger, level=logging.WARNING, md_mode=False):
     if md_mode:
         md_lines = [
             f"{pre_msg}\n",
-            "| TERM | FOUND | TOTAL | MISSING | COVERAGE |",
-            "| :--- | ---: | ---: | ---: | ---: |"
+            f"{'TERM':<10s} {'FOUND':>10s} {'TOTAL':>10s} {'MISSING':>10s}    {'COVERAGE':>8s}"
         ]
         
         for label, found, total, missing in data_rows:
-            cov_str = f"{100.0 * found / total:.2f}%" if total > 0 else "N/A"
-            md_lines.append(f"| {label} | {found} | {total} | {missing} | {cov_str} |")
+            cov_str = f"{100.0 * found / total:>8.2f}%" if total > 0 else "     N/A"
+            md_lines.append(f"{label:<10s} {found:10d} {total:10d} {missing:10d}   {cov_str}")
         
-        tot_cov_str = f"{100.0 * total_found / total_expected:.2f}%" if total_expected > 0 else "N/A"
-        md_lines.append(f"| **TOTAL** | **{total_found}** | **{total_expected}** | **{total_missing}** | **{tot_cov_str}** |")
+        tot_cov_str = f"{100.0 * total_found / total_expected:>8.2f}%" if total_expected > 0 else "     N/A"
+        md_lines.append(f"{'TOTAL':<10s} {total_found:10d} {total_expected:10d} {total_missing:10d}   {tot_cov_str}")
         
         emit("\n".join(md_lines))
 
