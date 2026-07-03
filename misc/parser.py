@@ -1,4 +1,5 @@
 import os
+import pickle
 from openbabel import openbabel as ob
 
 import numpy as np
@@ -65,6 +66,50 @@ def sdf_load_all_as_one(input_path):
     if rd_combined_mol:
         Chem.SanitizeMol(rd_combined_mol)
     return rd_combined_mol, ob_combined_mol, success
+
+
+def sdf_load_list(input_path):
+    suppl = Chem.SDMolSupplier(input_path, removeHs=False)
+    rd_combined_mol = None
+
+    # Accumulators for tracking properties across all molecules in the list
+    all_rd_mols = []
+    all_ob_mols = []
+    global_box_tensor = None
+
+    for mol in suppl:
+        if mol is None:
+            continue
+
+
+        num_atoms = mol.GetNumAtoms()
+
+        if not mol.HasProp("RES_NAMES"):
+            mol.SetProp("RES_NAMES", ' '.join(["UNL"] * num_atoms))
+
+        if not mol.HasProp("RES_NUMS"):
+            mol.SetProp("RES_NAMES", ' '.join([""] * num_atoms))
+
+        # Retain the first valid box tensor encountered in the file
+        if global_box_tensor is None and mol.HasProp("BOX_TENSOR"):
+            global_box_tensor = mol.GetProp("BOX_TENSOR")
+
+        Chem.SanitizeMol(mol)
+        all_rd_mols.append(mol)
+
+    # OpenBabel parsing pipeline handles multiple blocks naturally via += operations
+    obConversion = ob.OBConversion()
+    obConversion.SetInFormat("sdf")
+    ob_mol = ob.OBMol()
+    notatend = obConversion.ReadFile(ob_mol, input_path)
+
+    while notatend:
+        all_ob_mols.append(ob_mol)
+        ob_mol = ob.OBMol()
+        notatend = obConversion.Read(ob_mol)
+    success = len(all_rd_mols) == len(all_ob_mols)
+
+    return all_rd_mols, all_ob_mols, success
 
 
 def molecule_reader(input_path):
@@ -170,29 +215,16 @@ def molecule_reader(input_path):
 
 
 def molecule_reader_list(input_path):
-    """
-    工业级大体系读取器
-    支持 PDB 和 SDF (V3000) 格式。
-    具备残基编号溢出自动还原（Unwrap）机制与全自动默认兜底。
-
-    返回:
-        obmol: Ob mol
-        rdmol: RDKit 分子对象
-        coordinates: Nx3 的 numpy 数组 (单位: 埃)
-        res_names: 长度为 N 的列表 (每个原子的残基名)
-        res_ids: 长度为 N 的列表 (每个原子的真实大残基编号，可达百万)
-        box_tensor: 长度为 9 的列表 (埃)
-    """
     ext = os.path.splitext(input_path)[-1].lower().replace('.', '')
     if ext == 'pdb':
-        rdmol = Chem.MolFromPDBFile(input_path, removeHs=False)
+        rdmol_lst = [Chem.MolFromPDBFile(input_path, removeHs=False)]
     elif ext == 'sdf':
-        rdmol, obmol, ob_suc = sdf_load_all_as_one(input_path)
+        rdmol_lst, obmol_lst, ob_suc = sdf_load_list(input_path)
+    elif ext == 'pkl':
+        rdmol_lst = pickle.load(open(input_path, 'rb'))
     else:
-        raise ValueError("Only PDB and SDF files are supported!")
+        raise ValueError("Only PDB, SDF or PKL (pickle of `list[Chem.Mol]`) files are supported!")
 
-    if not rdmol or not rdmol.GetNumConformers():
+    if len(rdmol_lst) == 0:
         raise ValueError("Read file failed!")
-
-    mol_list = Chem.GetMolFrags(rdmol, asMols=True)
-    return mol_list
+    return rdmol_lst

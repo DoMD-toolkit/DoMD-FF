@@ -92,12 +92,12 @@ def print_opls_stats(forcefield, logger, level=logging.WARNING):
     ]
 
     lines = []
-    lines.append(" ================================================================")
-    lines.append("              FORCE FIELD PARAMETERIZATION STATISTICS             ")
-    lines.append(" ================================================================")
+    lines.append("    ================================================================")
+    lines.append("                 FORCE FIELD PARAMETERIZATION STATISTICS            ")
+    lines.append("    ================================================================")
     lines.append("")
-    lines.append("   TERM        FOUND        TOTAL      MISSING     COVERAGE")
-    lines.append(" ---------------------------------------------------------------")
+    lines.append("      TERM        FOUND        TOTAL      MISSING     COVERAGE")
+    lines.append("    ---------------------------------------------------------------")
 
     total_found = 0
     total_expected = 0
@@ -113,10 +113,10 @@ def print_opls_stats(forcefield, logger, level=logging.WARNING):
         coverage_str = f"{100.0 * found / total:8.2f}%" if total > 0 else "     N/A"
 
         lines.append(
-            f"   {label:<10s} {found:10d} {total:10d} {missing:10d}   {coverage_str}"
+            f"      {label:<10s} {found:10d} {total:10d} {missing:10d}   {coverage_str}"
         )
 
-    lines.append(" ---------------------------------------------------------------")
+    lines.append("    ---------------------------------------------------------------")
 
     total_missing = max(total_expected - total_found, 0)
     total_coverage_str = (
@@ -126,9 +126,10 @@ def print_opls_stats(forcefield, logger, level=logging.WARNING):
     )
 
     lines.append(
-        f"   {'TOTAL':<10s} {total_found:10d} {total_expected:10d} "
+        f"      {'TOTAL':<10s} {total_found:10d} {total_expected:10d} "
         f"{total_missing:10d}   {total_coverage_str}"
     )
-    lines.append(" ================================================================")
+    lines.append("    ================================================================")
+    
     pre_msg = "Force field parameterization success." if forcefield.success else "Force field parameterization failed."
-    emit(f"{pre_msg}\n" + "\n".join(lines))
+    emit(f"{pre_msg}\n\n" + "\n".join(lines))
