@@ -49,19 +49,21 @@ def get_opls_bonded_idx(rdmol: Chem.Mol):
     return bond_idx, angle_idx, dihedral_idx, improper_idx
 
 
-def print_opls_stats(forcefield, logger, level=logging.WARNING):
-    """
-    Print force-field parameter coverage statistics in a Fortran-style block.
 
+def print_opls_stats(forcefield, logger, level=logging.WARNING, md_mode=False):
+    """
+    Print force-field parameter coverage statistics.
+    
     Parameters
     ----------
-    forcefield
+    forcefield : object
         Force-field object containing forcefield._meta.
-    logger
+    logger : object
         Python logger-like object.
-    level
-        Logging level. Can be logging.INFO, logging.WARNING, etc.,
-        or a string such as "info", "warning", "error".
+    level : int or str
+        Logging level.
+    md_mode : bool
+        If True, outputs a stripped-down, left-aligned plain text block.
     """
     if isinstance(level, str):
         level_name = level.upper()
@@ -73,14 +75,21 @@ def print_opls_stats(forcefield, logger, level=logging.WARNING):
         logger.log(level, message)
 
     meta = getattr(forcefield, "_meta", None)
+    
     if not isinstance(meta, dict):
-        emit("\n" + "\n".join([
-            " ================================================================",
-            "              FORCE FIELD PARAMETERIZATION STATISTICS             ",
-            " ================================================================",
-            "   WARNING: forcefield._meta is missing or invalid.",
-            " ================================================================"
-        ]))
+        if md_mode:
+            emit("\n".join([
+                "FORCE FIELD PARAMETERIZATION STATISTICS",
+                "WARNING: forcefield._meta is missing or invalid."
+            ]))
+        else:
+            emit("\n" + "\n".join([
+                " ================================================================",
+                "              FORCE FIELD PARAMETERIZATION STATISTICS             ",
+                " ================================================================",
+                "   WARNING: forcefield._meta is missing or invalid.",
+                " ================================================================"
+            ]))
         return
 
     rows = [
@@ -91,13 +100,7 @@ def print_opls_stats(forcefield, logger, level=logging.WARNING):
         ("IMPROPERS", "n_imp",  "t_imp"),
     ]
 
-    lines = []
-    lines.append("    ================================================================")
-    lines.append("                 FORCE FIELD PARAMETERIZATION STATISTICS            ")
-    lines.append("    ================================================================")
-    lines.append("")
-    lines.append("      TERM        FOUND        TOTAL      MISSING     COVERAGE")
-    lines.append("    ---------------------------------------------------------------")
+    data_rows = []
 
     total_found = 0
     total_expected = 0
@@ -110,26 +113,54 @@ def print_opls_stats(forcefield, logger, level=logging.WARNING):
         total_found += found
         total_expected += total
 
-        coverage_str = f"{100.0 * found / total:8.2f}%" if total > 0 else "     N/A"
-
-        lines.append(
-            f"      {label:<10s} {found:10d} {total:10d} {missing:10d}   {coverage_str}"
-        )
-
-    lines.append("    ---------------------------------------------------------------")
+        data_rows.append((label, found, total, missing))
 
     total_missing = max(total_expected - total_found, 0)
-    total_coverage_str = (
-        f"{100.0 * total_found / total_expected:8.2f}%"
-        if total_expected > 0 else
-        "     N/A"
-    )
-
-    lines.append(
-        f"      {'TOTAL':<10s} {total_found:10d} {total_expected:10d} "
-        f"{total_missing:10d}   {total_coverage_str}"
-    )
-    lines.append("    ================================================================")
-    
     pre_msg = "Force field parameterization success." if forcefield.success else "Force field parameterization failed."
-    emit(f"{pre_msg}\n\n" + "\n".join(lines))
+
+    if md_mode:
+        md_lines = [
+            f"{pre_msg}\n",
+            f"{'TERM':<10s} {'FOUND':>10s} {'TOTAL':>10s} {'MISSING':>10s}    {'COVERAGE':>8s}"
+        ]
+        
+        for label, found, total, missing in data_rows:
+            cov_str = f"{100.0 * found / total:>8.2f}%" if total > 0 else "     N/A"
+            md_lines.append(f"{label:<10s} {found:10d} {total:10d} {missing:10d}   {cov_str}")
+        
+        tot_cov_str = f"{100.0 * total_found / total_expected:>8.2f}%" if total_expected > 0 else "     N/A"
+        md_lines.append(f"{'TOTAL':<10s} {total_found:10d} {total_expected:10d} {total_missing:10d}   {tot_cov_str}")
+        
+        emit("\n".join(md_lines))
+
+    else:
+        lines = []
+        lines.append(" ================================================================")
+        lines.append("              FORCE FIELD PARAMETERIZATION STATISTICS             ")
+        lines.append(" ================================================================")
+        lines.append("")
+        lines.append("   TERM        FOUND        TOTAL      MISSING     COVERAGE")
+        lines.append(" ---------------------------------------------------------------")
+
+        for label, found, total, missing in data_rows:
+            coverage_str = f"{100.0 * found / total:8.2f}%" if total > 0 else "     N/A"
+            lines.append(
+                f"   {label:<10s} {found:10d} {total:10d} {missing:10d}   {coverage_str}"
+            )
+
+        lines.append(" ---------------------------------------------------------------")
+
+        total_coverage_str = (
+            f"{100.0 * total_found / total_expected:8.2f}%"
+            if total_expected > 0 else
+            "     N/A"
+        )
+
+        lines.append(
+            f"   {'TOTAL':<10s} {total_found:10d} {total_expected:10d} "
+            f"{total_missing:10d}   {total_coverage_str}"
+        )
+        lines.append(" ================================================================")
+        
+        emit(f"{pre_msg}\n" + "\n".join(lines))
+
