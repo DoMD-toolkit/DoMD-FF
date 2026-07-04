@@ -216,9 +216,9 @@ def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True,
 
     for atom_idx in params_atoms:
         atom = params_atoms[atom_idx]
-        if ION_TBL.haskey(atom.element):
+        if ION_TBL.get(atom.element) is not None:
             ion = ION_TBL.get(atom.element).get(ion_env)
-            if ion:
+            if ion is not None:
                 params_atoms[atom_idx] = ion
 
     return ((params_atoms, params_bonded, params_impropers),
