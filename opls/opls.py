@@ -4,6 +4,7 @@ from rdkit import Chem
 
 from lib import get_opls_bonded_idx, count_bonded
 from misc.logger import logger
+from opls._misc import OPLSAtom
 from opls.functions import (
     _build_hash,
     match_atom_by_gmx_rule,
@@ -16,11 +17,32 @@ from opls.functions import (
 )
 from opls.opls_db import opls_db
 
+# opls_406   Li+  3   6.94100     1.000       A    2.12645e-01  7.64793e-02
+# opls_404   Li+  3   6.94100     1.000       A    1.25992e-01  2.61500e+01
+# opls_407   Na+  11  22.98977     1.000       A    3.33045e-01  1.15980e-02
+# opls_405   Na+  11  22.98977     1.000       A    1.89744e-01  6.72427e+00
+
+ION_TBL = {
+    'Li': {
+        'aq': OPLSAtom(opls_num=406, bond_type='Li+', element='Li', mass=6.941,
+                       sigma=2.12645e-01, epsilon=7.64793e-02, charge=1.0, ptype='A'),
+        'cond': OPLSAtom(opls_num=404, bond_type='Li+', element='Li', mass=6.941,
+                       sigma=1.25992e-01, epsilon=2.61500e+01, charge=1.0, ptype='A')
+    },
+    'Na': {
+        'aq': OPLSAtom(opls_num=407, bond_type='Na+', element='Na', mass=22.990,
+                       sigma=3.33045e-01, epsilon=1.15980e-02, charge=1.0, ptype='A'),
+        'cond': OPLSAtom(opls_num=405, bond_type='Na+', element='Na', mass=22.990,
+                       sigma=1.89744e-01, epsilon=6.72427e+00, charge=1.0, ptype='A')
+    },
+}
+
 THRESHOLD_L = 5000
 THRESHOLD_H = 5000
 
 
-def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True, useBOSS=False, useML=False, overwrite=False):
+def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True,
+               useBOSS=False, useML=False, overwrite=False, ion_env='aq'):
     n_atoms = rdmol.GetNumAtoms()
     ob_success = obmol is not None
     if obmol is None and n_atoms > THRESHOLD_L:
@@ -191,6 +213,13 @@ def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True, useBOSS=Fal
     meta = {'n_atom': len(params_atoms), 'n_bond': m_b, 'n_ang': m_a, 'n_dih': m_d, 'n_imp': len(params_impropers),
             't_atom': rdmol.GetNumAtoms(), 't_bond': len(bond_idx), 't_ang': len(angle_idx), 't_dih': len(dihedral_idx),
             't_imp': len(params_impropers)}
+
+    for atom_idx in params_atoms:
+        atom = params_atoms[atom_idx]
+        if ION_TBL.haskey(atom.element):
+            ion = ION_TBL.get(atom.element).get(ion_env)
+            if ion:
+                params_atoms[atom_idx] = ion
 
     return ((params_atoms, params_bonded, params_impropers),
             (missing_atoms, missing_bonded, missing_impropers),
