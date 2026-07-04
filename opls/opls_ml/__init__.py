@@ -12,24 +12,29 @@ from opls._misc import (
 from itertools import permutations
 
 
-def atom_model(atom_graph, molecule):
+def atom_model(atom_graph, molecule, single_atom_params=None):
+    if not single_atom_params:
+        single_atom_params = {}
     atoms_ff = {}
     atoms_params = mlnonbond(atom_graph)
     charges_params = mlcharge(atom_graph)
     for atom in molecule.GetAtoms():
         query = atom.GetIdx()
-        _atom = atoms_params[query]
-        _charge = charges_params[query]
-        _symbol = atom.GetSymbol()
-        _mass = atom.GetMass()
-        atoms_ff[query] = OPLSAtom(opls_num=0,
-                                   bond_type=f"{_symbol}_ML",
-                                   element=_symbol,
-                                   charge=_charge,
-                                   epsilon=_atom[0],
-                                   sigma=_atom[1],
-                                   ptype='A',
-                                   mass=_mass)
+        if query in single_atom_params:
+            atoms_ff[query] = single_atom_params[query]
+        else:
+            _atom = atoms_params[query]
+            _charge = charges_params[query]
+            _symbol = atom.GetSymbol()
+            _mass = atom.GetMass()
+            atoms_ff[query] = OPLSAtom(opls_num=0,
+                                       bond_type=f"{_symbol}_ML",
+                                       element=_symbol,
+                                       charge=_charge,
+                                       epsilon=_atom[0],
+                                       sigma=_atom[1],
+                                       ptype='A',
+                                       mass=_mass)
     return atoms_ff
 
 

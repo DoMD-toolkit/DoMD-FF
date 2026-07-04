@@ -74,7 +74,7 @@ def getneimasssum(atom: Chem.Atom) -> float:
     return s
 
 
-def g_from_networkx(g):
+def g_from_networkx_(g):
     edge_index = []
     bo = []
     bidx = []
@@ -88,14 +88,17 @@ def g_from_networkx(g):
         bidx.extend([bidx_val, bidx_val])
 
     x_f = []
+    x_f_q = []
     orig_idx = []
     for n, d in sorted(g.nodes(data=True)):
         x_f.append(d['x_f'])
+        x_f_q.append(d['x_f_q'])
         orig_idx.append(d['orig_idx'])
     num_nodes = len(g.nodes)
     return Data(
         edge_index=torch.tensor(edge_index, dtype=torch.long).T,
         x_f=torch.tensor(np.array(x_f), dtype=torch.float),
+        x_f_q=torch.tensor(np.array(x_f_q), dtype=torch.float),
         orig_idx=torch.tensor(orig_idx, dtype=torch.long),
         bo=torch.tensor(np.array(bo), dtype=torch.float),
         bidx=torch.tensor(bidx, dtype=torch.long),
@@ -297,7 +300,17 @@ def _build_atom_graph(mol: Chem.Mol) -> nx.Graph:
     return g
 
 
-def _build_line_graphs(g: nx.Graph, mol: Chem.Mol) -> tuple[nx.Graph, nx.Graph]:
+def _extract_single_atom(atom_graph: nx.Graph) -> set:
+    r"""
+    Extracts the index set for all single atom node from the atom graph.
+    """
+    single_atom_set = set()
+    for n in atom_graph.nodes:
+        if atom_graph.degree[n] == 0:
+            single_atom_set.add(n)
+    return single_atom_set
+
+def _build_topology_graphs(g: nx.Graph, mol: Chem.Mol) -> tuple[nx.Graph, nx.Graph]:
     r"""
     Constructs the Bond Graph and Angle Graph via line graph transformation.
     
@@ -389,7 +402,7 @@ def _build_line_graphs(g: nx.Graph, mol: Chem.Mol) -> tuple[nx.Graph, nx.Graph]:
     return bond_g, ang_g
 
 
-def mol2torch_graph(molecule: Union[Chem.Mol, Chem.RWMol], debug: bool = False) -> tuple[Data, Data, Data]:
+def mol2torch_graph(molecule: Union[Chem.Mol, Chem.RWMol], debug: bool = False) -> tuple[Data, Data, Data, set]:
     r"""
     Converts an RDKit molecule into a three-tier hierarchical graph structure
     (Atom Graph, Bond Graph, and Angle Graph) required for Machine Learning Force Fields (MLFF).
@@ -401,21 +414,24 @@ def mol2torch_graph(molecule: Union[Chem.Mol, Chem.RWMol], debug: bool = False) 
     Returns:
         A tuple of three PyTorch Geometric Data objects corresponding to the
         atom, bond, and angle graphs respectively.
+        Additionally, returns a set of single atom indices for special handling.
     """
     ComputeGasteigerCharges(molecule, nIter=120)
 
     # 1. Construct the base atom graph
     g = _build_atom_graph(molecule)
 
+    single_atom_set = _extract_single_atom(g)
+
     # 2. Perform line-graph ascending transformations
-    bond_g, ang_g = _build_line_graphs(g, molecule)
+    bond_g, ang_g = _build_topology_graphs(g, molecule)
 
     # 3. Optional debug checking
     if debug:
         _sanity_check(g, ang_g, molecule)
 
     # 4. Export to PyG Tensor format
-    return g_from_networkx(g), bg_from_networkx(bond_g), ag_from_networkx(ang_g)
+    return g_from_networkx(g), bg_from_networkx(bond_g), ag_from_networkx(ang_g), single_atom_set
 
 
 def _sanity_check(g: nx.Graph, ang_g: nx.Graph, molecule: Chem.Mol):

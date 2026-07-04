@@ -6,10 +6,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GATConv
+import networkx as nx
+from rdkit import Chem
 
 device = torch.device('cpu')
 this_dir, this_file = os.path.split(__file__)
 MODEL_DIR = 'models'
+
 
 
 ## Nonbond
@@ -65,7 +68,10 @@ with open(path_nb_an, 'rb') as f:
 
 
 def mlnonbond(mol_graph):
+    #rom opls.functions import match_by_gmx_rule
     data = mol_graph
+    #if single_atom_set is None:
+    #    single_atom_set = set()
     with torch.no_grad():
         crossE, _ = NBModel(data.x_f.float(), data.edge_index, data.bo.float(), 1)
     an = data.x_f[:, 1].numpy().ravel()
@@ -86,12 +92,13 @@ def mlnonbond(mol_graph):
     nonbondpara = {}
     orgi_idx = data.orig_idx.numpy()
     for i, p in enumerate(nonbondpara_):
+        #if i in single_atom_set:
+        #    atom_num = data.x_f[i, 1].item()
+        #    mol = Chem.RWMol()
+        #    mol.AddAtom(Chem.Atom(int(atom_num)))
+        #    atom_type = match_by_gmx_rule(mol)
+        #    p = (atom_type.epsilon, atom_type.sigma)
         nonbondpara[orgi_idx[i]] = p
-    # for i in nonbondpara:
-    #    p = nonbondpara[i]
-    #    if nb_an[p] != an[i]:
-    #        print('Error in nonbond assignment!')
-    #        raise
     return nonbondpara
 
 
@@ -136,7 +143,10 @@ CHModel.to(device)
 
 
 def mlcharge(mol_graph):
+    #from opls.functions import match_by_gmx_rule
     data = mol_graph
+    #if single_atom_set is None:
+    #    single_atom_set = set()
     shift = 10
     fcharge = (data.x_f[:, 4] / 5).ravel().detach().cpu().numpy().sum()
     with torch.no_grad():
@@ -146,6 +156,12 @@ def mlcharge(mol_graph):
     # print(fcharge.sum(), o.sum())
     charge = {}
     for i, c in enumerate(o):
+        #if i in single_atom_set:
+        #    atom_num = data.x_f[i, 1].item()
+        #    mol = Chem.RWMol()
+        #    mol.AddAtom(Chem.Atom(int(atom_num)))
+        #    atom_type = match_by_gmx_rule(mol)
+        #    c = atom_type.charge
         charge[i] = c
     return charge
 
@@ -349,7 +365,7 @@ in_features, out_features, hidden_size, heads = 30, 2, 100, 1
 flag = 2
 
 DihedralModel = GATDik(in_features, hidden_size, out_features, heads, flag)
-model_p = torch.load(os.path.join(this_dir, MODEL_DIR, 'minDi_add.pt'), map_location="cpu", weights_only=True)
+model_p = torch.load(os.path.join(this_dir, MODEL_DIR, 'minDi.pt'), map_location="cpu", weights_only=True)
 DihedralModel.load_state_dict(model_p)
 DihedralModel.to(device)
 DihedralModel.eval()

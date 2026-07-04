@@ -639,16 +639,33 @@ def match_improper_by_gmx_rule(params_atoms, improper_idx):
     return params, missing
 
 
+def _extract_single_atom_params(rdmol: Chem.Mol):
+    '''
+    Extract parameters for single atoms (atoms with degree 0) in the molecule using GMX rules.
+
+    '''
+    single_atoms_params = {}
+    for a in rdmol.GetAtoms():
+        index = a.GetIdx()
+        if a.GetDegree() == 0:
+            rep_mol = Chem.RWMol()
+            rep_mol.AddAtom(a)
+            single_atoms_params[index] = match_by_gmx_rule(rep_mol)[0][0]
+    return single_atoms_params
+
 def match_params_ml(rdmol: Chem.Mol, missing_atoms, missing_bonded, missing_impropers):
     atom_params = {}
     bonded_params = {}
     improper_params = {}
     missing = {}
-    mol_graph, bond_graph, angle_graph = mol2torch_graph(rdmol)
+    mol_graph, bond_graph, angle_graph, single_atoms = mol2torch_graph(rdmol)
+    single_atoms_params = {}
+    if single_atoms:
+        single_atoms_params = _extract_single_atom_params(rdmol)
     if mol_graph is None:
         logger.error("Failed to convert molecule to graph for ML prediction.")
         return atom_params, bonded_params, improper_params
-    atomtypes = atom_model(mol_graph, rdmol)
+    atomtypes = atom_model(mol_graph, rdmol, single_atoms_params)
     impropers = improper_model(mol_graph, rdmol)
     if bond_graph is not None:
         bonds = bond_model(mol_graph, rdmol)
