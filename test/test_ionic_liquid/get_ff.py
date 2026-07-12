@@ -2,7 +2,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from misc.logger import logger
-from misc.pipeline import run_itp_mode, run_top_mode
+from pipeline import run_itp_mode, run_top_mode
 
 logger.setLevel('WARNING')
 
