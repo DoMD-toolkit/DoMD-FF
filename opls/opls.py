@@ -59,21 +59,7 @@ def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True,
         logger.warn(f"The target molecule has more than {THRESHOLD_H} atoms, template method is not available."
                     f"I'll set `useGMX=False`.")
         useGMX = False
-    if useML:
-        # 1. Base check for total atom count
-        if n_atoms < 4:
-            useML = False
-        else:
-            # 2. Advanced check: ensure at least one sequential 4-atom chain exists (3 contiguous bonds)
-            # length=3 with useBonds=True searches for paths consisting of exactly 3 sequential bonds (A-B-C-D)
-            has_dihedral = len(Chem.FindAllPathsOfLengthN(rdmol, 3, useBonds=True)) > 0
 
-            if not has_dihedral:
-                logger.warning(
-                    f"The molecule contains {n_atoms} atoms but lacks a sequential 4-atom pathway. "
-                    f"No chemical dihedral angle can be defined. Disabling useML."
-                )
-                useML = False
     params_atoms = {}
     params_bonded = {}
     params_impropers = {}
@@ -86,6 +72,23 @@ def opls_setup(rdmol: Chem.Mol, obmol: ob.OBMol = None, useGMX=True,
     _cache_boss_imp = {}
 
     bond_idx, angle_idx, dihedral_idx, improper_idx = get_opls_bonded_idx(rdmol)
+
+    if useML:
+    # 1. Base check for total atom count
+    if n_atoms < 4:
+        useML = False
+    else:
+        # 2. Advanced check: ensure at least one sequential 4-atom chain exists (3 contiguous bonds)
+        # length=3 with useBonds=True searches for paths consisting of exactly 3 sequential bonds (A-B-C-D)
+        has_dihedral = len(dihedral_idx) > 0
+
+        if not has_dihedral:
+            logger.warning(
+                f"The molecule contains {n_atoms} atoms but lacks a sequential 4-atom pathway. "
+                f"No chemical dihedral angle can be defined. Disabling useML."
+            )
+            useML = False
+    
     # all missing
     missing_atoms = set(list(range(rdmol.GetNumAtoms())))
     missing_bonded = set.union(set(bond_idx), set(angle_idx), set(dihedral_idx))
