@@ -140,6 +140,7 @@ CHModel = GATCharge(in_features, hidden_size, out_features, heads)
 model_p = torch.load(os.path.join(this_dir, MODEL_DIR, 'minCharge.pt'), map_location="cpu", weights_only=True)
 CHModel.load_state_dict(model_p)
 CHModel.to(device)
+CHModel.eval()
 
 
 def mlcharge(mol_graph):
